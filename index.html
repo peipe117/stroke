@@ -81,6 +81,13 @@
             content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             border: 2px solid #e2e8f0; border-radius: 12px; pointer-events: none;
         }
+
+        .ai-content h3 { font-size: 1.1em; font-weight: bold; margin-bottom: 0.5em; color: #2563eb; margin-top: 1em; }
+        .ai-content h3:first-child { margin-top: 0; }
+        .ai-content p { margin-bottom: 0.8em; line-height: 1.6; text-align: justify; }
+        .ai-content ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.8em; }
+        .ai-content li { margin-bottom: 0.4em; }
+        .ai-content strong { color: #1f2937; }
         
         #writer-target { position: relative; z-index: 1; }
         
@@ -125,21 +132,11 @@
                         <span>📲</span>
                         <span class="hidden sm:inline">安裝</span>
                     </button>
-                    <!-- 自訂按鈕 -->
-                    <button onclick="openCustomModal()" class="text-sm bg-green-50 text-green-700 px-3 py-1.5 rounded-lg font-bold hover:bg-green-100 transition flex items-center gap-1">
-                        <span>➕</span>
-                        <span class="hidden sm:inline">自訂</span>
-                    </button>
-                    <!-- 成績單 -->
-                    <button onclick="openScoreModal()" class="text-sm bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-lg font-bold hover:bg-yellow-100 transition flex items-center gap-1">
-                        <span>📊</span>
-                        <span class="hidden sm:inline">成績單</span>
-                    </button>
                 </div>
             </div>
             
             <div class="flex justify-between items-center gap-2 pb-1">
-                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none flex-1 max-w-[200px]">
+                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none flex-1 max-w-[260px]">
                     <!-- JS 生成 -->
                 </select>
             </div>
@@ -223,8 +220,8 @@
             </div>
         </div>
 
-        <button onclick="nextChar()" class="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition z-10">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        <button onclick="nextChar()" class="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
 
     </main>
@@ -342,7 +339,19 @@
         </div>
     </div>
 
+    <!-- 複製成功提示 (Toast) -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+        已複製，請貼上查詢
+    </div>
+
     <script>
+        // 課名標題
+        const lessonTitles = [
+            "新同學", "我爸爸做生意", "去超級市場", "我想吃漢堡", 
+            "秋天快到了", "農曆新年", "早一點睡覺", "我的寵物", 
+            "音樂教室在北方", "外公、外婆住在台灣", "去動物園", "打網路電話"
+        ];
+
         // 資料庫
         const vocabulary = [
             // 第一課
@@ -525,7 +534,7 @@
             for(let i=1; i<=12; i++) {
                 const opt = document.createElement('option');
                 opt.value = i;
-                opt.innerText = `第 ${i} 課`;
+                opt.innerText = `第 ${i} 課：${lessonTitles[i-1]}`;
                 select.appendChild(opt);
             }
             
@@ -660,10 +669,14 @@
                         document.getElementById('loading-indicator').classList.add('hidden');
                         document.getElementById('error-msg').classList.remove('hidden');
                     },
+                    // Critical Fix: Custom Data Loader with Fallback
                     charDataLoader: function(char, onComplete, onError) {
                         const encodedChar = encodeURIComponent(char);
                         
+                        // 1. 優先嘗試 Artex (GitHub) - 繁體修正版
                         const urlTraditional = `https://cdn.jsdelivr.net/gh/Artex/hanzi-writer-data-traditional@master/data/${encodedChar}.json`;
+                        
+                        // 2. 備用方案 (Standard NPM) - 絕對穩定的備援
                         const urlStandard = `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodedChar}.json`;
 
                         fetch(urlTraditional)
@@ -896,6 +909,7 @@
             document.getElementById('score-modal').classList.add('hidden');
         }
 
+        // --- Custom Input Logic ---
         function openCustomModal() {
             document.getElementById('custom-modal').classList.remove('hidden');
             const currentChars = customVocab.map(item => item.char).join('');
