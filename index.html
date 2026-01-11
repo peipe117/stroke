@@ -6,7 +6,7 @@
     <title>學華語向前走(二) - 筆順練習</title>
     <meta name="description" content="數位化華語生字筆順練習工具，支援自訂生字與教育部字典查詢。">
     
-    <!-- PWA Meta Tags -->
+    <!-- PWA / Mobile Web App Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="筆順練習">
@@ -22,26 +22,29 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <style>
+        /* 引入 Google Noto Serif TC 作為楷體備援 */
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
 
+        /* 字體設定：加入 AR PL UKai TW 增加相容性 */
         body { 
-            font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "Noto Serif TC", serif; 
+            font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "AR PL UKai TW", "Noto Serif TC", serif; 
             background-color: #f8fafc;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
         }
         
         .ui-font { font-family: system-ui, -apple-system, sans-serif; }
-        .char-font { font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "Noto Serif TC", serif; }
+        .char-font { font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "AR PL UKai TW", "Noto Serif TC", serif; }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         #writer-card {
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
             transition: transform 0.2s;
         }
 
+        /* 底部字卡樣式 */
         .strip-item {
             transition: all 0.2s;
             border: 2px solid transparent;
@@ -54,6 +57,7 @@
             z-index: 10;
         }
 
+        /* 讀取動畫 */
         .loader {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #3b82f6;
@@ -64,10 +68,12 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* Modal 動畫 */
         .modal-bg { transition: opacity 0.3s ease-in-out; }
         .modal-bg.hidden { opacity: 0; pointer-events: none; }
         .modal-bg:not(.hidden) { opacity: 1; pointer-events: auto; }
 
+        /* 田字格背景 */
         .tian-grid-bg {
             background-image: 
                 linear-gradient(0deg, transparent 49.5%, #e2e8f0 49.5%, #e2e8f0 50.5%, transparent 50.5%),
@@ -81,13 +87,6 @@
             content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             border: 2px solid #e2e8f0; border-radius: 12px; pointer-events: none;
         }
-
-        .ai-content h3 { font-size: 1.1em; font-weight: bold; margin-bottom: 0.5em; color: #2563eb; margin-top: 1em; }
-        .ai-content h3:first-child { margin-top: 0; }
-        .ai-content p { margin-bottom: 0.8em; line-height: 1.6; text-align: justify; }
-        .ai-content ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.8em; }
-        .ai-content li { margin-bottom: 0.4em; }
-        .ai-content strong { color: #1f2937; }
         
         #writer-target { position: relative; z-index: 1; }
         
@@ -111,7 +110,7 @@
         .dict-pinyin { color: #6b7280; font-size: 0.9rem; font-family: monospace; }
         .dict-def-item { margin-bottom: 0.5rem; }
         .dict-def-num { display: inline-block; width: 1.2em; color: #3b82f6; font-weight: bold; }
-        .dict-def-text { color: #374151; line-height: 1.6; }
+        .dict-def-text { color: #374151; line-height: 1.6; text-align: justify; }
         .dict-example { color: #6b7280; font-size: 0.9rem; margin-top: 0.2rem; padding-left: 1.2em; }
     </style>
 </head>
@@ -119,24 +118,21 @@
 
     <!-- 1. 頂部導航 -->
     <header class="bg-white shadow-sm z-20 flex-none ui-font">
-        <div class="max-w-6xl mx-auto px-4 py-2 flex flex-col gap-2">
-            <div class="flex justify-between items-center">
-                <h1 class="text-lg md:text-xl font-bold tracking-wide flex items-center gap-2 truncate">
-                    <span class="text-blue-600 text-xl">✍️</span> 
-                    <span class="char-font">學華語向前走(二)</span>
-                </h1>
-                
-                <div class="flex items-center gap-2">
-                    <!-- 安裝按鈕 -->
-                    <button id="install-btn" onclick="triggerInstall()" class="hidden text-xs bg-pink-50 text-pink-600 px-2 py-1.5 rounded-lg font-bold hover:bg-pink-100 transition flex items-center gap-1">
-                        <span>📲</span>
-                        <span class="hidden sm:inline">安裝</span>
-                    </button>
-                </div>
-            </div>
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-wide flex items-center gap-2 truncate">
+                <span class="text-blue-600 text-2xl">✍️</span> 
+                <span class="char-font text-lg">學華語向前走(二)</span>
+            </h1>
             
-            <div class="flex justify-between items-center gap-2 pb-1">
-                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none flex-1 max-w-[260px]">
+            <div class="flex items-center gap-2">
+                <!-- 安裝按鈕 -->
+                <button id="install-btn" onclick="triggerInstall()" class="hidden text-xs bg-pink-50 text-pink-600 px-3 py-1.5 rounded-lg font-bold hover:bg-pink-100 transition flex items-center gap-1 shadow-sm">
+                    <span>📲</span>
+                    <span>安裝</span>
+                </button>
+                
+                <!-- 課程選擇 -->
+                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none cursor-pointer">
                     <!-- JS 生成 -->
                 </select>
             </div>
@@ -146,17 +142,18 @@
     <!-- 2. 中間寫字板區 -->
     <main id="stage-area" class="flex-grow relative flex flex-col items-center justify-center bg-gray-100 w-full overflow-hidden">
         
+        <!-- 左箭頭 -->
         <button onclick="prevChar()" class="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
 
-        <div id="writer-card" class="bg-white rounded-3xl p-4 flex flex-col items-center relative z-0 w-[90%] max-w-[400px]">
+        <div id="writer-card" class="bg-white rounded-3xl p-5 flex flex-col items-center relative z-0 w-[90%] max-w-[400px]">
             
             <!-- 拼音注音 -->
-            <div class="w-full flex justify-between items-end mb-2 px-2 select-none min-h-[2rem]">
+            <div class="w-full flex justify-between items-end mb-3 px-2 select-none min-h-[2rem]">
                 <div class="text-gray-500 font-medium char-font text-xl" id="stage-zhuyin"></div>
-                <button onclick="speakCurrentChar()" class="p-2 rounded-full hover:bg-blue-50 text-blue-500 transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button onclick="speakCurrentChar()" class="p-2 rounded-full hover:bg-blue-50 text-blue-500 transition" title="播放發音">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                     </svg>
                 </button>
@@ -173,7 +170,7 @@
                 <div id="error-msg" class="absolute inset-0 flex flex-col items-center justify-center bg-white/90 z-10 hidden text-center px-4">
                     <p class="text-red-500 font-bold ui-font mb-1">載入失敗</p>
                     <p class="text-xs text-gray-500 mb-2">請檢查網路</p>
-                    <button onclick="reloadCurrent()" class="text-xs bg-gray-200 px-2 py-1 rounded ui-font hover:bg-gray-300">重試</button>
+                    <button onclick="reloadCurrent()" class="text-xs bg-gray-200 px-3 py-1.5 rounded-full ui-font hover:bg-gray-300 transition">重試</button>
                 </div>
                 <div id="feedback-msg" class="absolute bottom-4 left-0 right-0 text-center font-bold text-lg pointer-events-none opacity-0 transition-opacity duration-300 char-font" style="text-shadow: 0 1px 2px rgba(255,255,255,1);"></div>
                 <div id="current-best-score" class="absolute top-2 right-2 text-yellow-400 text-2xl filter drop-shadow-sm font-bold opacity-80 pointer-events-none"></div>
@@ -184,15 +181,15 @@
             <div class="w-full mt-4 space-y-3 ui-font">
                 <!-- 第一排：核心練習 -->
                 <div class="grid grid-cols-3 gap-3">
-                    <button onclick="startAnimation()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 transition">
+                    <button onclick="startAnimation()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 transition shadow-sm border border-blue-100">
                         <span class="text-xl">👀</span>
                         <span class="text-xs font-bold mt-1">演示</span>
                     </button>
-                    <button onclick="startPractice()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 active:scale-95 transition">
+                    <button onclick="startPractice()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 active:scale-95 transition shadow-sm border border-green-100">
                         <span class="text-xl">✍️</span>
                         <span class="text-xs font-bold mt-1">練習</span>
                     </button>
-                    <button onclick="startQuiz()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 active:scale-95 transition">
+                    <button onclick="startQuiz()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 active:scale-95 transition shadow-sm border border-purple-100">
                         <span class="text-xl">💯</span>
                         <span class="text-xs font-bold mt-1">測驗</span>
                     </button>
@@ -204,12 +201,12 @@
                     <span>字典解說</span>
                 </button>
 
-                <!-- 第三排 -->
+                <!-- 第三排：管理功能 -->
                 <div class="grid grid-cols-2 gap-3">
-                    <button onclick="openCustomModal()" class="py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition flex items-center justify-center gap-2">
+                    <button onclick="openCustomModal()" class="py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition flex items-center justify-center gap-2 shadow-sm">
                         <span>✏️</span> 自訂生字
                     </button>
-                    <button onclick="openScoreModal()" class="py-2.5 rounded-xl bg-yellow-50 text-yellow-700 font-bold hover:bg-yellow-100 transition flex items-center justify-center gap-2">
+                    <button onclick="openScoreModal()" class="py-2.5 rounded-xl bg-yellow-50 text-yellow-700 font-bold hover:bg-yellow-100 transition flex items-center justify-center gap-2 shadow-sm border border-yellow-100">
                         <span>📊</span> 查看成績
                     </button>
                 </div>
@@ -221,13 +218,13 @@
         </div>
 
         <button onclick="nextChar()" class="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>
 
     </main>
 
     <!-- 3. 底部選單 -->
-    <footer class="bg-white border-t border-gray-200 flex-none h-32 w-full z-20">
+    <footer class="bg-white border-t border-gray-200 flex-none h-32 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div class="h-full w-full max-w-6xl mx-auto p-3">
             <div id="character-strip" class="flex items-center gap-3 overflow-x-auto h-full px-2 no-scrollbar scroll-smooth pb-2">
                 <!-- JS 生成 -->
@@ -236,7 +233,7 @@
     </footer>
 
     <!-- 修訂者簽名 -->
-    <div class="flex-none bg-gray-50 text-center py-1 text-[10px] text-gray-400 ui-font border-t border-gray-100">
+    <div class="flex-none bg-gray-50 text-center py-2 text-[10px] text-gray-400 ui-font border-t border-gray-100">
         Sophia Wong 修訂
     </div>
 
@@ -259,12 +256,12 @@
 
     <!-- 5. 成績單彈窗 -->
     <div id="score-modal" class="modal-bg fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden backdrop-blur-sm">
-        <div class="bg-white rounded-2xl p-0 w-[90%] max-w-md shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+        <div class="bg-white rounded-2xl p-0 w-[90%] max-w-md shadow-2xl flex flex-col max-h-[85vh] overflow-hidden m-4">
             <div class="p-4 border-b bg-yellow-50 flex justify-between items-center">
                 <h3 class="text-xl font-bold text-yellow-800 flex items-center gap-2 ui-font">
                     <span>📊</span> 學習成績單
                 </h3>
-                <button onclick="closeScoreModal()" class="text-gray-400 hover:text-gray-600 p-1">
+                <button onclick="closeScoreModal()" class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-yellow-100 transition">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -288,7 +285,7 @@
                 <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2 ui-font">
                     <span class="text-2xl">📖</span> 字典解說
                 </h3>
-                <button onclick="closeDictModal()" class="text-gray-400 hover:text-gray-600 p-2 bg-gray-100 rounded-full">
+                <button onclick="closeDictModal()" class="text-gray-400 hover:text-gray-600 p-2 bg-gray-100 rounded-full transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
@@ -302,7 +299,7 @@
             
             <div class="mt-4 pt-3 border-t flex justify-between items-center text-xs text-gray-400">
                 <span>資料來源：萌典 (教育部重編國語辭典)</span>
-                <button onclick="openOfficialMoe()" class="text-blue-500 hover:underline">前往教育部小字典 ↗</button>
+                <button onclick="openOfficialMoe()" class="text-blue-500 hover:underline font-bold">前往教育部小字典 ↗</button>
             </div>
         </div>
     </div>
@@ -340,7 +337,7 @@
     </div>
 
     <!-- 複製成功提示 (Toast) -->
-    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-[60]">
         已複製，請貼上查詢
     </div>
 
@@ -1072,7 +1069,7 @@
             if(!toast) {
                 const div = document.createElement('div');
                 div.id = 'toast';
-                div.className = 'fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50';
+                div.className = 'fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-[60]';
                 document.body.appendChild(div);
             }
             
