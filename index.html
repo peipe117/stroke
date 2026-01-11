@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>學華語向前走(二) - 筆順練習</title>
-    <meta name="description" content="數位化華語生字筆順練習工具，支援自訂生字與AI講解。">
+    <meta name="description" content="數位化華語生字筆順練習工具，支援自訂生字與教育部字典查詢。">
     
-    <!-- PWA / Mobile Web App Meta Tags -->
+    <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="筆順練習">
@@ -18,8 +18,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Hanzi Writer -->
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
-    <!-- Marked.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
@@ -83,13 +81,6 @@
             content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
             border: 2px solid #e2e8f0; border-radius: 12px; pointer-events: none;
         }
-
-        .ai-content h3 { font-size: 1.1em; font-weight: bold; margin-bottom: 0.5em; color: #2563eb; margin-top: 1em; }
-        .ai-content h3:first-child { margin-top: 0; }
-        .ai-content p { margin-bottom: 0.8em; line-height: 1.6; text-align: justify; }
-        .ai-content ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.8em; }
-        .ai-content li { margin-bottom: 0.4em; }
-        .ai-content strong { color: #1f2937; }
         
         #writer-target { position: relative; z-index: 1; }
         
@@ -104,32 +95,51 @@
             100% { transform: scale(1); opacity: 1; }
         }
         .animate-bounce-in { animation: bounce-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        /* 字典內容樣式 */
+        .dict-entry { border-bottom: 1px solid #f3f4f6; padding-bottom: 1rem; margin-bottom: 1rem; }
+        .dict-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .dict-pronunciation { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .dict-zhuyin { font-weight: bold; color: #1f2937; font-size: 1.1rem; }
+        .dict-pinyin { color: #6b7280; font-size: 0.9rem; font-family: monospace; }
+        .dict-def-item { margin-bottom: 0.5rem; }
+        .dict-def-num { display: inline-block; width: 1.2em; color: #3b82f6; font-weight: bold; }
+        .dict-def-text { color: #374151; line-height: 1.6; }
+        .dict-example { color: #6b7280; font-size: 0.9rem; margin-top: 0.2rem; padding-left: 1.2em; }
     </style>
 </head>
 <body class="flex flex-col h-screen overflow-hidden text-gray-800">
 
     <!-- 1. 頂部導航 -->
     <header class="bg-white shadow-sm z-20 flex-none ui-font">
-        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
-            <h1 class="text-xl font-bold tracking-wide flex items-center gap-2 truncate">
-                <span class="text-blue-600 text-2xl">✍️</span> 
-                <span class="char-font text-lg">學華語向前走(二)</span>
-            </h1>
-            
-            <div class="flex items-center gap-2">
-                <!-- 設定按鈕 (用於重設 Key) -->
-                <button onclick="openKeyModal()" class="text-gray-400 hover:text-gray-600 p-2" title="設定 API 金鑰">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                </button>
-
-                <!-- 安裝按鈕 -->
-                <button id="install-btn" onclick="triggerInstall()" class="hidden text-xs bg-pink-50 text-pink-600 px-2 py-1.5 rounded-lg font-bold hover:bg-pink-100 transition flex items-center gap-1">
-                    <span>📲</span>
-                    <span>安裝</span>
-                </button>
+        <div class="max-w-6xl mx-auto px-4 py-2 flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <h1 class="text-lg md:text-xl font-bold tracking-wide flex items-center gap-2 truncate">
+                    <span class="text-blue-600 text-xl">✍️</span> 
+                    <span class="char-font">學華語向前走(二)</span>
+                </h1>
                 
-                <!-- 課程選擇 -->
-                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 outline-none">
+                <div class="flex items-center gap-2">
+                    <!-- 安裝按鈕 -->
+                    <button id="install-btn" onclick="triggerInstall()" class="hidden text-xs bg-pink-50 text-pink-600 px-2 py-1.5 rounded-lg font-bold hover:bg-pink-100 transition flex items-center gap-1">
+                        <span>📲</span>
+                        <span class="hidden sm:inline">安裝</span>
+                    </button>
+                    <!-- 自訂按鈕 -->
+                    <button onclick="openCustomModal()" class="text-sm bg-green-50 text-green-700 px-3 py-1.5 rounded-lg font-bold hover:bg-green-100 transition flex items-center gap-1">
+                        <span>➕</span>
+                        <span class="hidden sm:inline">自訂</span>
+                    </button>
+                    <!-- 成績單 -->
+                    <button onclick="openScoreModal()" class="text-sm bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-lg font-bold hover:bg-yellow-100 transition flex items-center gap-1">
+                        <span>📊</span>
+                        <span class="hidden sm:inline">成績單</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="flex justify-between items-center gap-2 pb-1">
+                <select id="lesson-select" class="bg-gray-50 border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none flex-1 max-w-[200px]">
                     <!-- JS 生成 -->
                 </select>
             </div>
@@ -137,13 +147,13 @@
     </header>
 
     <!-- 2. 中間寫字板區 -->
-    <main id="stage-area" class="flex-grow relative flex flex-col items-center justify-center bg-gray-50 w-full overflow-hidden">
+    <main id="stage-area" class="flex-grow relative flex flex-col items-center justify-center bg-gray-100 w-full overflow-hidden">
         
-        <button onclick="prevChar()" class="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-sm border border-gray-200 items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
+        <button onclick="prevChar()" class="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
 
-        <div id="writer-card" class="bg-white rounded-2xl p-6 flex flex-col items-center relative z-0 w-[90%] max-w-[420px]">
+        <div id="writer-card" class="bg-white rounded-3xl p-4 flex flex-col items-center relative z-0 w-[90%] max-w-[400px]">
             
             <!-- 拼音注音 -->
             <div class="w-full flex justify-between items-end mb-2 px-2 select-none min-h-[2rem]">
@@ -175,7 +185,7 @@
 
             <!-- 功能按鈕區 -->
             <div class="w-full mt-4 space-y-3 ui-font">
-                <!-- 第一排 -->
+                <!-- 第一排：核心練習 -->
                 <div class="grid grid-cols-3 gap-3">
                     <button onclick="startAnimation()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 transition">
                         <span class="text-xl">👀</span>
@@ -191,10 +201,10 @@
                     </button>
                 </div>
 
-                <!-- 第二排 -->
-                <button onclick="askAITeacher()" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2">
-                    <span>👩‍🏫</span>
-                    <span>AI 老師講解</span>
+                <!-- 第二排：教育部字典按鈕 -->
+                <button onclick="showDictionary()" class="w-full py-3 rounded-xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2">
+                    <span>📖</span>
+                    <span>字典解說</span>
                 </button>
 
                 <!-- 第三排 -->
@@ -274,21 +284,28 @@
         </div>
     </div>
 
-    <!-- 6. AI 老師彈窗 -->
-    <div id="ai-modal" class="modal-bg fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 hidden backdrop-blur-sm">
+    <!-- 6. 字典解說彈窗 -->
+    <div id="dict-modal" class="modal-bg fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 hidden backdrop-blur-sm">
         <div class="bg-white rounded-t-3xl md:rounded-3xl p-6 w-full md:w-[90%] max-w-md shadow-2xl transform transition-transform duration-300 flex flex-col max-h-[85vh]">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2 ui-font">
-                    <span class="text-2xl">👩‍🏫</span> AI 老師小教室
+                    <span class="text-2xl">📖</span> 字典解說
                 </h3>
-                <button onclick="closeAiModal()" class="text-gray-400 hover:text-gray-600 p-2 bg-gray-100 rounded-full">
+                <button onclick="closeDictModal()" class="text-gray-400 hover:text-gray-600 p-2 bg-gray-100 rounded-full">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <div id="ai-content-area" class="overflow-y-auto pr-2 ui-font text-base text-gray-700 ai-content"></div>
-            <div id="ai-loading" class="flex flex-col items-center justify-center py-8">
+            <div id="dict-content-area" class="overflow-y-auto pr-2 ui-font text-base text-gray-700 dict-content flex-grow">
+                <!-- 字典內容 -->
+            </div>
+            <div id="dict-loading" class="flex flex-col items-center justify-center py-8">
                 <div class="loader mb-3"></div>
-                <p class="text-sm text-gray-500 animate-pulse">AI 老師正在思考中...</p>
+                <p class="text-sm text-gray-500 animate-pulse">正在查詢字典...</p>
+            </div>
+            
+            <div class="mt-4 pt-3 border-t flex justify-between items-center text-xs text-gray-400">
+                <span>資料來源：萌典 (教育部重編國語辭典)</span>
+                <button onclick="openOfficialMoe()" class="text-blue-500 hover:underline">前往教育部小字典 ↗</button>
             </div>
         </div>
     </div>
@@ -325,29 +342,7 @@
         </div>
     </div>
 
-    <!-- 9. API Key Modal (新增) -->
-    <div id="key-modal" class="modal-bg fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden backdrop-blur-sm">
-        <div class="bg-white rounded-2xl w-[90%] max-w-sm shadow-2xl p-6">
-            <h3 class="text-xl font-bold text-gray-800 mb-3 ui-font flex items-center gap-2">
-                <span>🔑</span> 設定 API 金鑰
-            </h3>
-            <p class="text-xs text-gray-500 mb-4 ui-font">要使用 AI 老師功能，請輸入您的 Google Gemini API Key。金鑰只會儲存在您的裝置上。</p>
-            <input type="password" id="api-key-input" class="w-full border border-gray-300 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white text-gray-900" placeholder="貼上您的 API Key">
-            
-            <div class="flex gap-3">
-                <button onclick="closeKeyModal()" class="flex-1 py-2 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition ui-font">取消</button>
-                <button onclick="saveApiKey()" class="flex-1 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition ui-font">儲存</button>
-            </div>
-            <div class="mt-4 text-center">
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-xs text-blue-500 hover:underline">取得免費 Key →</a>
-            </div>
-        </div>
-    </div>
-
     <script>
-        // Init with stored key or empty
-        let userApiKey = localStorage.getItem('gemini_api_key') || "";
-
         // 資料庫
         const vocabulary = [
             // 第一課
@@ -901,11 +896,6 @@
             document.getElementById('score-modal').classList.add('hidden');
         }
 
-        function closeAiModal() {
-            document.getElementById('ai-modal').classList.add('hidden');
-        }
-
-        // --- Custom Input Logic ---
         function openCustomModal() {
             document.getElementById('custom-modal').classList.remove('hidden');
             const currentChars = customVocab.map(item => item.char).join('');
@@ -944,91 +934,6 @@
             closeCustomModal();
         }
 
-        // --- API Key Logic ---
-        function openKeyModal() {
-            document.getElementById('key-modal').classList.remove('hidden');
-            document.getElementById('api-key-input').value = userApiKey;
-        }
-
-        function closeKeyModal() {
-            document.getElementById('key-modal').classList.add('hidden');
-        }
-
-        function saveApiKey() {
-            const input = document.getElementById('api-key-input');
-            const key = input.value.trim();
-            if (key) {
-                userApiKey = key;
-                localStorage.setItem('gemini_api_key', key);
-                closeKeyModal();
-                alert('金鑰已儲存！');
-            } else {
-                alert('請輸入有效的 API Key');
-            }
-        }
-
-        async function askAITeacher() {
-            if (lessonVocab.length === 0) return;
-            
-            // Check for API Key
-            if (!userApiKey) {
-                openKeyModal();
-                return;
-            }
-
-            const item = lessonVocab[currentIndex];
-            const modal = document.getElementById('ai-modal');
-            const contentArea = document.getElementById('ai-content-area');
-            const loading = document.getElementById('ai-loading');
-            
-            modal.classList.remove('hidden');
-            contentArea.innerHTML = '';
-            loading.classList.remove('hidden');
-
-            try {
-                const prompt = `你是台灣教育部的國語文專家。請根據《教育部國語辭典》的標準，為初學者解釋生字：「${item.char}」。
-                請包含以下內容：
-                1. **部首與總筆畫**：例如「走部，7畫」。
-                2. **解釋**：用簡單易懂的繁體中文解釋字義（參考教育部簡編本）。
-                3. **例詞與例句**：提供 2 個常見造詞與 1 個生活例句（附注音）。
-                4. **字源或記憶法**：簡單有趣的記憶方式。
-                請使用 Markdown 格式輸出。`;
-
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${userApiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error.message);
-                }
-                
-                const text = data.candidates[0].content.parts[0].text;
-                contentArea.innerHTML = marked.parse(text);
-
-            } catch (error) {
-                console.error(error);
-                contentArea.innerHTML = `
-                    <div class="text-center p-4">
-                        <div class="text-red-500 font-bold mb-2">連線發生錯誤</div>
-                        <div class="text-xs text-gray-500 text-left bg-gray-100 p-2 rounded">
-                            可能原因：<br>
-                            1. API Key 無效或過期<br>
-                            2. 網路連線不穩定<br>
-                            3. 額度已用完<br><br>
-                            錯誤訊息：${error.message}
-                        </div>
-                        <button onclick="openKeyModal()" class="mt-3 text-blue-500 underline text-sm">檢查金鑰設定</button>
-                    </div>`;
-            } finally {
-                loading.classList.add('hidden');
-            }
-        }
-
-        // --- Install Prompt Logic ---
         let deferredPrompt;
 
         function initInstallPrompt() {
@@ -1061,6 +966,106 @@
 
         function closeInstallModal() {
             document.getElementById('install-modal').classList.add('hidden');
+        }
+
+        // --- 字典查詢功能 (Moedict API) ---
+        function closeDictModal() {
+            document.getElementById('dict-modal').classList.add('hidden');
+        }
+
+        function openOfficialMoe() {
+            if (lessonVocab.length === 0) return;
+            const item = lessonVocab[currentIndex];
+            // 複製並跳轉 (為了方便搜尋)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(item.char);
+            }
+            window.open('https://dict.mini.moe.edu.tw/', '_blank');
+        }
+
+        function showDictionary() {
+            if (lessonVocab.length === 0) return;
+            const item = lessonVocab[currentIndex];
+            const char = item.char;
+
+            const modal = document.getElementById('dict-modal');
+            const contentArea = document.getElementById('dict-content-area');
+            const loading = document.getElementById('dict-loading');
+            
+            modal.classList.remove('hidden');
+            contentArea.innerHTML = '';
+            loading.classList.remove('hidden');
+
+            // Fetch from Moedict API
+            fetch(`https://www.moedict.tw/uni/${encodeURIComponent(char)}`)
+                .then(res => {
+                    if(!res.ok) throw new Error('查無此字');
+                    return res.json();
+                })
+                .then(data => {
+                    renderDictData(data);
+                })
+                .catch(err => {
+                    console.error(err);
+                    contentArea.innerHTML = `
+                        <div class="text-center py-8">
+                            <div class="text-gray-400 mb-2">字典裡找不到這個字</div>
+                            <button onclick="openOfficialMoe()" class="text-blue-500 hover:underline">試試教育部小字典 ↗</button>
+                        </div>
+                    `;
+                })
+                .finally(() => {
+                    loading.classList.add('hidden');
+                });
+        }
+
+        function renderDictData(data) {
+            const contentArea = document.getElementById('dict-content-area');
+            let html = '';
+
+            if (data.heteronyms) {
+                data.heteronyms.forEach((h, index) => {
+                    html += `<div class="dict-entry">`;
+                    html += `<div class="dict-pronunciation">
+                                <span class="dict-zhuyin">${h.bopomofo || ''}</span>
+                                <span class="dict-pinyin">${h.pinyin || ''}</span>
+                             </div>`;
+                    
+                    if (h.definitions) {
+                        h.definitions.forEach((def, i) => {
+                            html += `<div class="dict-def-item">
+                                        <div>
+                                            <span class="dict-def-num">${i + 1}.</span>
+                                            <span class="dict-def-text">${def.def}</span>
+                                        </div>`;
+                            if (def.example) {
+                                def.example.forEach(ex => {
+                                    html += `<div class="dict-example">${ex}</div>`;
+                                });
+                            }
+                            html += `</div>`;
+                        });
+                    }
+                    html += `</div>`;
+                });
+            }
+
+            contentArea.innerHTML = html;
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            if(!toast) {
+                const div = document.createElement('div');
+                div.id = 'toast';
+                div.className = 'fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50';
+                document.body.appendChild(div);
+            }
+            
+            const el = document.getElementById('toast');
+            el.innerText = message;
+            el.style.opacity = 1;
+            setTimeout(() => { el.style.opacity = 0; }, 3000);
         }
     </script>
 </body>
