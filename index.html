@@ -2,13 +2,14 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- 加入 viewport-fit=cover 以支援全螢幕安全區域 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>學華語向前走(二) - 筆順練習</title>
     <meta name="description" content="數位化華語生字筆順練習工具，支援自訂生字與教育部字典查詢。">
     
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="筆順練習">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1250/1250617.png">
@@ -20,19 +21,33 @@
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
     <!-- Canvas Confetti -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- OpenCC JS (繁簡轉換庫) -->
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
 
         body { 
             font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "Noto Serif TC", serif; 
             background-color: #f8fafc;
             touch-action: manipulation;
             -webkit-tap-highlight-color: transparent;
+            /* 使用 dvh (dynamic viewport height) 解決手機瀏覽器網址列問題 */
+            height: 100dvh;
+            overflow: hidden;
+        }
+        
+        /* 簡體模式字體 */
+        body.mode-simp {
+            font-family: "KaiTi", "STKaiti", "Noto Sans SC", sans-serif;
         }
         
         .ui-font { font-family: system-ui, -apple-system, sans-serif; }
+        
+        /* 繁體字體 */
         .char-font { font-family: "TW-Kai", "BiauKai", "DFKai-SB", "KaiTi", "Noto Serif TC", serif; }
+        /* 簡體字體 */
+        .mode-simp .char-font { font-family: "KaiTi", "STKaiti", "Noto Sans SC", serif; }
 
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -40,6 +55,10 @@
         #writer-card {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             transition: transform 0.2s;
+            /* 讓卡片在極小螢幕可滾動，避免內容被切掉 */
+            max-height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         .strip-item {
@@ -100,20 +119,35 @@
         .dict-def-num { display: inline-block; width: 1.2em; color: #3b82f6; font-weight: bold; }
         .dict-def-text { color: #374151; line-height: 1.6; text-align: justify; }
         .dict-example { color: #6b7280; font-size: 0.9rem; margin-top: 0.2rem; padding-left: 1.2em; }
+        
+        /* Safe Area Padding for Footer */
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* 簡體模式下隱藏注音 */
+        .mode-simp .zhuyin-display {
+            display: none !important;
+        }
     </style>
 </head>
-<body class="flex flex-col h-screen overflow-hidden text-gray-800">
+<body class="flex flex-col text-gray-800">
 
-    <!-- 1. 頂部導航 -->
-    <header class="bg-white shadow-sm z-20 flex-none ui-font">
-        <div class="max-w-6xl mx-auto px-4 py-2 flex flex-col gap-2">
+    <!-- 1. 頂部導航 (減少 Padding 以節省空間) -->
+    <header class="bg-white shadow-sm z-20 flex-none ui-font pt-safe-top">
+        <div class="max-w-6xl mx-auto px-4 py-2 flex flex-col gap-1.5 md:gap-2">
             <div class="flex justify-between items-center">
                 <h1 class="text-lg md:text-xl font-bold tracking-wide flex items-center gap-2 truncate">
                     <span class="text-blue-600 text-xl">✍️</span> 
-                    <span class="char-font">學華語向前走(二)</span>
+                    <span class="char-font" id="app-title">學華語向前走(二)</span>
                 </h1>
                 
                 <div class="flex items-center gap-2">
+                    <!-- 繁簡切換按鈕 -->
+                    <button onclick="toggleMode()" id="mode-btn" class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 transition shadow-sm border border-gray-200">
+                        繁體
+                    </button>
+
                     <!-- 安裝按鈕 -->
                     <button id="install-btn" onclick="triggerInstall()" class="hidden text-xs bg-pink-50 text-pink-600 px-3 py-1.5 rounded-lg font-bold hover:bg-pink-100 transition flex items-center gap-1 shadow-sm">
                         <span>📲</span>
@@ -130,29 +164,35 @@
         </div>
     </header>
 
-    <!-- 2. 中間寫字板區 -->
-    <main id="stage-area" class="flex-grow relative flex flex-col items-center justify-center bg-gray-100 w-full overflow-hidden">
+    <!-- 2. 中間寫字板區 (使用 Flex-1 和 min-h-0 確保內容可縮放) -->
+    <main id="stage-area" class="flex-1 min-h-0 relative flex flex-col items-center justify-center bg-gray-100 w-full overflow-hidden p-2">
         
         <!-- 左箭頭 -->
-        <button onclick="prevChar()" class="hidden md:flex absolute left-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
+        <button onclick="prevChar()" class="hidden md:flex absolute left-4 lg:left-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
         </button>
 
-        <div id="writer-card" class="bg-white rounded-3xl p-5 flex flex-col items-center relative z-0 w-[90%] max-w-[400px]">
+        <!-- 卡片容器 (調整最大寬度適應平板，允許內部捲動) -->
+        <div id="writer-card" class="bg-white rounded-3xl p-4 md:p-6 flex flex-col items-center relative z-0 w-full max-w-[500px] h-auto no-scrollbar">
             
             <!-- 拼音注音 -->
-            <div class="w-full flex justify-between items-end mb-3 px-2 select-none min-h-[2rem]">
-                <div class="text-gray-500 font-medium char-font text-xl" id="stage-zhuyin"></div>
-                <button onclick="speakCurrentChar()" class="p-2 rounded-full hover:bg-blue-50 text-blue-500 transition" title="播放發音">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div class="w-full flex justify-between items-end mb-2 px-2 select-none min-h-[1.8rem]">
+                <!-- 加入 zhuyin-display 類別，方便簡體模式隱藏 -->
+                <div class="text-gray-500 font-medium char-font text-xl md:text-2xl zhuyin-display" id="stage-zhuyin"></div>
+                
+                <!-- 若注音隱藏，靠左對齊 -->
+                <div class="flex-grow"></div> 
+
+                <button onclick="speakCurrentChar()" class="p-1.5 rounded-full hover:bg-blue-50 text-blue-500 transition" title="播放發音">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 md:h-7 md:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                     </svg>
                 </button>
-                <div class="text-blue-500 font-medium char-font text-xl" id="stage-pinyin"></div>
+                <div class="text-blue-500 font-medium char-font text-xl md:text-2xl ml-3" id="stage-pinyin"></div>
             </div>
 
-            <!-- Writer -->
-            <div class="relative w-full aspect-square max-w-[320px] rounded-xl overflow-hidden tian-grid-bg bg-white" id="writer-wrapper">
+            <!-- Writer (移除固定 aspect-square，改由 JS 動態計算最佳尺寸) -->
+            <div class="relative rounded-xl overflow-hidden tian-grid-bg bg-white shadow-inner mb-3 md:mb-4" id="writer-wrapper">
                 <div id="writer-target"></div>
                 
                 <div id="loading-indicator" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10 hidden">
@@ -169,35 +209,31 @@
             </div>
 
             <!-- 功能按鈕區 -->
-            <div class="w-full mt-4 space-y-3 ui-font">
+            <div class="w-full space-y-2 md:space-y-3 ui-font">
                 <!-- 第一排：核心練習 -->
-                <div class="grid grid-cols-3 gap-3">
-                    <button onclick="startAnimation()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 transition shadow-sm border border-blue-100">
-                        <span class="text-xl">👀</span>
+                <div class="grid grid-cols-3 gap-2 md:gap-3">
+                    <button onclick="startAnimation()" class="flex flex-col items-center justify-center py-2 md:py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 active:scale-95 transition shadow-sm border border-blue-100">
+                        <span class="text-lg md:text-xl">👀</span>
                         <span class="text-xs font-bold mt-1">演示</span>
                     </button>
-                    <button onclick="startPractice()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 active:scale-95 transition shadow-sm border border-green-100">
-                        <span class="text-xl">✍️</span>
+                    <!-- 中間按鈕：改回綠色風格與手寫圖示，但功能維持 startQuiz -->
+                    <button onclick="startQuiz()" class="flex flex-col items-center justify-center py-2 md:py-2.5 rounded-xl bg-green-50 text-green-600 hover:bg-green-100 active:scale-95 transition shadow-sm border border-green-100">
+                        <span class="text-lg md:text-xl">✍️</span>
                         <span class="text-xs font-bold mt-1">練習</span>
                     </button>
-                    <button onclick="startQuiz()" class="flex flex-col items-center justify-center py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 active:scale-95 transition shadow-sm border border-purple-100">
-                        <span class="text-xl">💯</span>
-                        <span class="text-xs font-bold mt-1">測驗</span>
+                    <!-- 右邊按鈕改成字典 -->
+                    <button onclick="showDictionary()" class="flex flex-col items-center justify-center py-2 md:py-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 active:scale-95 transition shadow-sm border border-orange-100">
+                        <span class="text-lg md:text-xl">📖</span>
+                        <span class="text-xs font-bold mt-1">字典</span>
                     </button>
                 </div>
 
-                <!-- 第二排：教育部字典按鈕 -->
-                <button onclick="showDictionary()" class="w-full py-3 rounded-xl bg-gradient-to-r from-orange-400 to-red-500 text-white font-bold shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2">
-                    <span>📖</span>
-                    <span>字典解說</span>
-                </button>
-
-                <!-- 第三排：管理功能 -->
-                <div class="grid grid-cols-2 gap-3">
-                    <button onclick="openCustomModal()" class="py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition flex items-center justify-center gap-2 shadow-sm">
+                <!-- 第二排：管理功能 (原本的長條字典按鈕已移除) -->
+                <div class="grid grid-cols-2 gap-2 md:gap-3">
+                    <button onclick="openCustomModal()" class="py-2 md:py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition flex items-center justify-center gap-2 shadow-sm">
                         <span>✏️</span> 自訂生字
                     </button>
-                    <button onclick="openScoreModal()" class="py-2.5 rounded-xl bg-yellow-50 text-yellow-700 font-bold hover:bg-yellow-100 transition flex items-center justify-center gap-2 shadow-sm border border-yellow-100">
+                    <button onclick="openScoreModal()" class="py-2 md:py-2.5 rounded-xl bg-yellow-50 text-yellow-700 font-bold hover:bg-yellow-100 transition flex items-center justify-center gap-2 shadow-sm border border-yellow-100">
                         <span>📊</span> 查看成績
                     </button>
                 </div>
@@ -208,24 +244,23 @@
             </div>
         </div>
 
-        <button onclick="nextChar()" class="hidden md:flex absolute right-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
+        <button onclick="nextChar()" class="hidden md:flex absolute right-4 lg:right-8 top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-md items-center justify-center text-gray-400 hover:text-blue-600 hover:border-blue-400 transition z-10">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
         </button>
 
     </main>
 
-    <!-- 3. 底部選單 (增加高度與 padding 避免切到字卡) -->
-    <footer class="bg-white border-t border-gray-200 flex-none h-40 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+    <!-- 3. 底部選單 (縮小高度，適應手機，加入 safe-pb) -->
+    <footer class="bg-white border-t border-gray-200 flex-none h-28 md:h-36 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-pb">
         <div class="h-full w-full max-w-6xl mx-auto p-2">
-            <!-- 增加 px-4 和 pt-3 -->
-            <div id="character-strip" class="flex items-center gap-3 overflow-x-auto h-full px-4 pt-3 no-scrollbar scroll-smooth">
+            <div id="character-strip" class="flex items-center gap-2 md:gap-3 overflow-x-auto h-full px-4 pt-1 pb-1 no-scrollbar scroll-smooth">
                 <!-- JS 生成 -->
             </div>
         </div>
     </footer>
 
     <!-- 修訂者簽名 -->
-    <div class="flex-none bg-gray-50 text-center py-2 text-[10px] text-gray-400 ui-font border-t border-gray-100">
+    <div class="flex-none bg-gray-50 text-center py-1 text-[10px] text-gray-400 ui-font border-t border-gray-100 safe-pb">
         Sophia Wong 修訂
     </div>
 
@@ -233,13 +268,22 @@
     <div id="result-modal" class="modal-bg fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden backdrop-blur-sm">
         <div class="bg-white rounded-2xl p-6 w-[85%] max-w-sm shadow-2xl transform scale-100 transition-transform duration-300 flex flex-col items-center animate-bounce-in">
             <div class="text-5xl mb-3 animate-bounce" id="result-emoji">🎉</div>
-            <h3 class="text-2xl font-bold text-gray-800 mb-1 ui-font">測驗完成</h3>
+            <h3 class="text-2xl font-bold text-gray-800 mb-1 ui-font" id="result-title">測驗完成</h3>
             <div class="flex gap-2 my-2 text-3xl text-yellow-400 filter drop-shadow-sm" id="result-stars"></div>
             <div class="text-gray-600 ui-font mb-6 text-center bg-gray-50 px-6 py-2 rounded-xl mt-2 w-full">
                 <div class="text-xs text-gray-400 mb-1">本次得分</div>
                 <span id="result-score" class="text-4xl font-bold text-blue-600">--</span>
                 <span class="text-sm font-medium">分</span>
             </div>
+            <!-- Streak Msg -->
+            <div id="streak-msg" class="hidden mb-4 text-pink-500 font-bold ui-font animate-pulse">
+                🎆 連續 3 次 100 分！太強了！ 🎆
+            </div>
+             <!-- Perfect Msg -->
+            <div id="perfect-msg" class="hidden mb-4 text-purple-600 font-bold ui-font animate-pulse text-lg">
+                🎆 恭喜！本課全部滿分！ 🎆
+            </div>
+            
             <button onclick="closeResultModal()" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-bold shadow-lg transition ui-font flex items-center justify-center gap-2">
                 <span>繼續練習</span>
             </button>
@@ -296,19 +340,42 @@
         </div>
     </div>
 
-    <!-- 7. 自訂生字 Modal -->
+    <!-- 7. 自訂生字 Modal (Updated) -->
     <div id="custom-modal" class="modal-bg fixed inset-0 z-50 flex items-center justify-center bg-black/50 hidden backdrop-blur-sm">
-        <div class="bg-white rounded-2xl w-[90%] max-w-sm shadow-2xl p-6">
-            <h3 class="text-xl font-bold text-gray-800 mb-4 ui-font flex items-center gap-2">
-                <span>✍️</span> 自訂練習生字
-            </h3>
-            <p class="text-sm text-gray-500 mb-2 ui-font">請輸入您想練習的漢字（可隨時修改）：</p>
-            <textarea id="custom-input" rows="4" class="w-full border border-gray-300 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none char-font text-xl resize-none placeholder-gray-400 text-gray-900 bg-white" placeholder="例如：新年快樂"></textarea>
+        <div class="bg-white rounded-2xl w-[90%] max-w-sm shadow-2xl p-6 relative overflow-hidden">
             
-            <div class="flex gap-3">
-                <button onclick="closeCustomModal()" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition ui-font">取消</button>
-                <button onclick="saveCustomWords()" class="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition ui-font">開始練習</button>
+            <!-- Standard Content -->
+            <div id="custom-modal-content">
+                <h3 class="text-xl font-bold text-gray-800 mb-4 ui-font flex items-center gap-2">
+                    <span>✍️</span> 自訂練習生字
+                </h3>
+                <p class="text-sm text-gray-500 mb-2 ui-font">請輸入您想練習的漢字（可隨時修改）：</p>
+                <textarea id="custom-input" rows="4" class="w-full border border-gray-300 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none char-font text-xl resize-none placeholder-gray-400 text-gray-900 bg-white" placeholder="例如：新年快樂"></textarea>
+                
+                <div class="flex flex-col gap-3">
+                    <div class="flex gap-3">
+                        <button onclick="closeCustomModal()" class="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 font-bold hover:bg-gray-50 transition ui-font">取消</button>
+                        <button onclick="saveCustomWords()" class="flex-1 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-md transition ui-font">開始練習</button>
+                    </div>
+                    <!-- Delete Button -->
+                    <button onclick="showDeleteConfirm()" class="w-full py-2 rounded-xl text-red-500 font-bold hover:bg-red-50 transition ui-font text-sm flex items-center justify-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        刪除自訂課程
+                    </button>
+                </div>
             </div>
+
+            <!-- Confirmation Overlay -->
+            <div id="custom-delete-confirm" class="absolute inset-0 bg-white flex flex-col items-center justify-center hidden z-10 p-6 text-center">
+                <div class="text-4xl mb-2">🗑️</div>
+                <h4 class="text-lg font-bold text-gray-800 mb-2">確定要刪除嗎？</h4>
+                <p class="text-sm text-gray-500 mb-6">自訂生字紀錄將會清空，無法復原。</p>
+                <div class="flex gap-3 w-full">
+                    <button onclick="hideDeleteConfirm()" class="flex-1 py-2 rounded-xl bg-gray-100 text-gray-600 font-bold">取消</button>
+                    <button onclick="confirmDeleteCustom()" class="flex-1 py-2 rounded-xl bg-red-500 text-white font-bold shadow-md">確定刪除</button>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -341,129 +408,129 @@
             "音樂教室在北方", "外公、外婆住在台灣", "去動物園", "打網路電話"
         ];
 
-        // 資料庫
+        // 資料庫 (新增 simp 欄位)
         const vocabulary = [
             // 第一課
-            { l: 1, char: '新', pinyin: 'xīn', zhuyin: 'ㄒㄧㄣ' },
-            { l: 1, char: '同', pinyin: 'tóng', zhuyin: 'ㄊㄨㄥˊ' },
-            { l: 1, char: '學', pinyin: 'xué', zhuyin: 'ㄒㄩㄝˊ' },
-            { l: 1, char: '自', pinyin: 'zì', zhuyin: 'ㄗˋ' },
-            { l: 1, char: '己', pinyin: 'jǐ', zhuyin: 'ㄐㄧˇ' },
-            { l: 1, char: '年', pinyin: 'nián', zhuyin: 'ㄋㄧㄢˊ' },
-            { l: 1, char: '跟', pinyin: 'gēn', zhuyin: 'ㄍㄣ' },
-            { l: 1, char: '比', pinyin: 'bǐ', zhuyin: 'ㄅㄧˇ' },
+            { l: 1, char: '新', simp: '新', pinyin: 'xīn', zhuyin: 'ㄒㄧㄣ' },
+            { l: 1, char: '同', simp: '同', pinyin: 'tóng', zhuyin: 'ㄊㄨㄥˊ' },
+            { l: 1, char: '學', simp: '学', pinyin: 'xué', zhuyin: 'ㄒㄩㄝˊ' },
+            { l: 1, char: '自', simp: '自', pinyin: 'zì', zhuyin: 'ㄗˋ' },
+            { l: 1, char: '己', simp: '己', pinyin: 'jǐ', zhuyin: 'ㄐㄧˇ' },
+            { l: 1, char: '年', simp: '年', pinyin: 'nián', zhuyin: 'ㄋㄧㄢˊ' },
+            { l: 1, char: '跟', simp: '跟', pinyin: 'gēn', zhuyin: 'ㄍㄣ' },
+            { l: 1, char: '比', simp: '比', pinyin: 'bǐ', zhuyin: 'ㄅㄧˇ' },
             // 第二課
-            { l: 2, char: '外', pinyin: 'wài', zhuyin: 'ㄨㄞˋ' },
-            { l: 2, char: '公', pinyin: 'gōng', zhuyin: 'ㄍㄨㄥ' },
-            { l: 2, char: '以', pinyin: 'yǐ', zhuyin: 'ㄧˇ' },
-            { l: 2, char: '前', pinyin: 'qián', zhuyin: 'ㄑㄧㄢˊ' },
-            { l: 2, char: '工', pinyin: 'gōng', zhuyin: 'ㄍㄨㄥ' },
-            { l: 2, char: '作', pinyin: 'zuò', zhuyin: 'ㄗㄨㄛˋ' },
-            { l: 2, char: '班', pinyin: 'bān', zhuyin: 'ㄅㄢ' },
-            { l: 2, char: '後', pinyin: 'hòu', zhuyin: 'ㄏㄡˋ' },
+            { l: 2, char: '外', simp: '外', pinyin: 'wài', zhuyin: 'ㄨㄞˋ' },
+            { l: 2, char: '公', simp: '公', pinyin: 'gōng', zhuyin: 'ㄍㄨㄥ' },
+            { l: 2, char: '以', simp: '以', pinyin: 'yǐ', zhuyin: 'ㄧˇ' },
+            { l: 2, char: '前', simp: '前', pinyin: 'qián', zhuyin: 'ㄑㄧㄢˊ' },
+            { l: 2, char: '工', simp: '工', pinyin: 'gōng', zhuyin: 'ㄍㄨㄥ' },
+            { l: 2, char: '作', simp: '作', pinyin: 'zuò', zhuyin: 'ㄗㄨㄛˋ' },
+            { l: 2, char: '班', simp: '班', pinyin: 'bān', zhuyin: 'ㄅㄢ' },
+            { l: 2, char: '後', simp: '后', pinyin: 'hòu', zhuyin: 'ㄏㄡˋ' },
             // 第三課
-            { l: 3, char: '去', pinyin: 'qù', zhuyin: 'ㄑㄩˋ' },
-            { l: 3, char: '近', pinyin: 'jìn', zhuyin: 'ㄐㄧㄣˋ' },
-            { l: 3, char: '買', pinyin: 'mǎi', zhuyin: 'ㄇㄞˇ' },
-            { l: 3, char: '東', pinyin: 'dōng', zhuyin: 'ㄉㄨㄥ' },
-            { l: 3, char: '西', pinyin: 'xī', zhuyin: 'ㄒㄧ' },
-            { l: 3, char: '魚', pinyin: 'yú', zhuyin: 'ㄩˊ' },
-            { l: 3, char: '還', pinyin: 'hái', zhuyin: 'ㄏㄞˊ' },
-            { l: 3, char: '可', pinyin: 'kě', zhuyin: 'ㄎㄜˇ' },
+            { l: 3, char: '去', simp: '去', pinyin: 'qù', zhuyin: 'ㄑㄩˋ' },
+            { l: 3, char: '近', simp: '近', pinyin: 'jìn', zhuyin: 'ㄐㄧㄣˋ' },
+            { l: 3, char: '買', simp: '买', pinyin: 'mǎi', zhuyin: 'ㄇㄞˇ' },
+            { l: 3, char: '東', simp: '东', pinyin: 'dōng', zhuyin: 'ㄉㄨㄥ' },
+            { l: 3, char: '西', simp: '西', pinyin: 'xī', zhuyin: 'ㄒㄧ' },
+            { l: 3, char: '魚', simp: '鱼', pinyin: 'yú', zhuyin: 'ㄩˊ' },
+            { l: 3, char: '還', simp: '还', pinyin: 'hái', zhuyin: 'ㄏㄞˊ' },
+            { l: 3, char: '可', simp: '可', pinyin: 'kě', zhuyin: 'ㄎㄜˇ' },
             // 第四課
-            { l: 4, char: '出', pinyin: 'chū', zhuyin: 'ㄔㄨ' },
-            { l: 4, char: '先', pinyin: 'xiān', zhuyin: 'ㄒㄧㄢ' },
-            { l: 4, char: '週', pinyin: 'zhōu', zhuyin: 'ㄓㄡ' },
-            { l: 4, char: '末', pinyin: 'mò', zhuyin: 'ㄇㄛˋ' },
-            { l: 4, char: '晚', pinyin: 'wǎn', zhuyin: 'ㄨㄢˇ' },
-            { l: 4, char: '蛋', pinyin: 'dàn', zhuyin: 'ㄉㄢˋ' },
-            { l: 4, char: '飯', pinyin: 'fàn', zhuyin: 'ㄈㄢˋ' },
-            { l: 4, char: '現', pinyin: 'xiàn', zhuyin: 'ㄒㄧㄢˋ' },
-            { l: 4, char: '點', pinyin: 'diǎn', zhuyin: 'ㄉㄧㄢˇ' },
+            { l: 4, char: '出', simp: '出', pinyin: 'chū', zhuyin: 'ㄔㄨ' },
+            { l: 4, char: '先', simp: '先', pinyin: 'xiān', zhuyin: 'ㄒㄧㄢ' },
+            { l: 4, char: '週', simp: '周', pinyin: 'zhōu', zhuyin: 'ㄓㄡ' },
+            { l: 4, char: '末', simp: '末', pinyin: 'mò', zhuyin: 'ㄇㄛˋ' },
+            { l: 4, char: '晚', simp: '晚', pinyin: 'wǎn', zhuyin: 'ㄨㄢˇ' },
+            { l: 4, char: '蛋', simp: '蛋', pinyin: 'dàn', zhuyin: 'ㄉㄢˋ' },
+            { l: 4, char: '飯', simp: '饭', pinyin: 'fàn', zhuyin: 'ㄈㄢˋ' },
+            { l: 4, char: '現', simp: '现', pinyin: 'xiàn', zhuyin: 'ㄒㄧㄢˋ' },
+            { l: 4, char: '點', simp: '点', pinyin: 'diǎn', zhuyin: 'ㄉㄧㄢˇ' },
             // 第五課
-            { l: 5, char: '黃', pinyin: 'huáng', zhuyin: 'ㄏㄨㄤˊ' },
-            { l: 5, char: '綠', pinyin: 'lǜ', zhuyin: 'ㄌㄩˋ' },
-            { l: 5, char: '色', pinyin: 'sè', zhuyin: 'ㄙㄜˋ' },
-            { l: 5, char: '時', pinyin: 'shí', zhuyin: 'ㄕˊ' },
-            { l: 5, char: '候', pinyin: 'hòu', zhuyin: 'ㄏㄡˋ' },
-            { l: 5, char: '花', pinyin: 'huā', zhuyin: 'ㄏㄨㄚ' },
-            { l: 5, char: '子', pinyin: 'zi', zhuyin: '˙ㄗ' },
-            { l: 5, char: '紅', pinyin: 'hóng', zhuyin: 'ㄏㄨㄥˊ' },
-            { l: 5, char: '白', pinyin: 'bái', zhuyin: 'ㄅㄞˊ' },
+            { l: 5, char: '黃', simp: '黄', pinyin: 'huáng', zhuyin: 'ㄏㄨㄤˊ' },
+            { l: 5, char: '綠', simp: '绿', pinyin: 'lǜ', zhuyin: 'ㄌㄩˋ' },
+            { l: 5, char: '色', simp: '色', pinyin: 'sè', zhuyin: 'ㄙㄜˋ' },
+            { l: 5, char: '時', simp: '时', pinyin: 'shí', zhuyin: 'ㄕˊ' },
+            { l: 5, char: '候', simp: '候', pinyin: 'hòu', zhuyin: 'ㄏㄡˋ' },
+            { l: 5, char: '花', simp: '花', pinyin: 'huā', zhuyin: 'ㄏㄨㄚ' },
+            { l: 5, char: '子', simp: '子', pinyin: 'zi', zhuyin: '˙ㄗ' },
+            { l: 5, char: '紅', simp: '红', pinyin: 'hóng', zhuyin: 'ㄏㄨㄥˊ' },
+            { l: 5, char: '白', simp: '白', pinyin: 'bái', zhuyin: 'ㄅㄞˊ' },
             // 第六課
-            { l: 6, char: '說', pinyin: 'shuō', zhuyin: 'ㄕㄨㄛ' },
-            { l: 6, char: '對', pinyin: 'duì', zhuyin: 'ㄉㄨㄟˋ' },
-            { l: 6, char: '星', pinyin: 'xīng', zhuyin: 'ㄒㄧㄥ' },
-            { l: 6, char: '期', pinyin: 'qí', zhuyin: 'ㄑㄧˊ' },
-            { l: 6, char: '會', pinyin: 'huì', zhuyin: 'ㄏㄨㄟˋ' },
-            { l: 6, char: '每', pinyin: 'měi', zhuyin: 'ㄇㄟˇ' },
-            { l: 6, char: '給', pinyin: 'gěi', zhuyin: 'ㄍㄟˇ' },
-            { l: 6, char: '如', pinyin: 'ㄖㄨˊ', zhuyin: 'ㄖㄨˊ' },
-            { l: 6, char: '果', pinyin: 'guǒ', zhuyin: 'ㄍㄨㄛˇ' },
+            { l: 6, char: '說', simp: '说', pinyin: 'shuō', zhuyin: 'ㄕㄨㄛ' },
+            { l: 6, char: '對', simp: '对', pinyin: 'duì', zhuyin: 'ㄉㄨㄟˋ' },
+            { l: 6, char: '星', simp: '星', pinyin: 'xīng', zhuyin: 'ㄒㄧㄥ' },
+            { l: 6, char: '期', simp: '期', pinyin: 'qí', zhuyin: 'ㄑㄧˊ' },
+            { l: 6, char: '會', simp: '会', pinyin: 'huì', zhuyin: 'ㄏㄨㄟˋ' },
+            { l: 6, char: '每', simp: '每', pinyin: 'měi', zhuyin: 'ㄇㄟˇ' },
+            { l: 6, char: '給', simp: '给', pinyin: 'gěi', zhuyin: 'ㄍㄟˇ' },
+            { l: 6, char: '如', simp: '如', pinyin: 'rú', zhuyin: 'ㄖㄨˊ' },
+            { l: 6, char: '果', simp: '果', pinyin: 'guǒ', zhuyin: 'ㄍㄨㄛˇ' },
             // 第七課
-            { l: 7, char: '起', pinyin: 'qǐ', zhuyin: 'ㄑㄧˇ' },
-            { l: 7, char: '累', pinyin: 'lèi', zhuyin: 'ㄌㄟˋ' },
-            { l: 7, char: '早', pinyin: 'zǎo', zhuyin: 'ㄗㄠˇ' },
-            { l: 7, char: '洗', pinyin: 'xǐ', zhuyin: 'ㄒㄧˇ' },
-            { l: 7, char: '昨', pinyin: 'zuó', zhuyin: 'ㄗㄨㄛˊ' },
-            { l: 7, char: '過', pinyin: 'guò', zhuyin: 'ㄍㄨㄛˋ' },
-            { l: 7, char: '別', pinyin: 'bié', zhuyin: 'ㄅㄧㄝˊ' },
-            { l: 7, char: '忘', pinyin: 'wàng', zhuyin: 'ㄨㄤˋ' },
-            { l: 7, char: '用', pinyin: 'yòng', zhuyin: 'ㄩㄥˋ' },
-            { l: 7, char: '臉', pinyin: 'liǎn', zhuyin: 'ㄌㄧㄢˇ' },
+            { l: 7, char: '起', simp: '起', pinyin: 'qǐ', zhuyin: 'ㄑㄧˇ' },
+            { l: 7, char: '累', simp: '累', pinyin: 'lèi', zhuyin: 'ㄌㄟˋ' },
+            { l: 7, char: '早', simp: '早', pinyin: 'zǎo', zhuyin: 'ㄗㄠˇ' },
+            { l: 7, char: '洗', simp: '洗', pinyin: 'xǐ', zhuyin: 'ㄒㄧˇ' },
+            { l: 7, char: '昨', simp: '昨', pinyin: 'zuó', zhuyin: 'ㄗㄨㄛˊ' },
+            { l: 7, char: '過', simp: '过', pinyin: 'guò', zhuyin: 'ㄍㄨㄛˋ' },
+            { l: 7, char: '別', simp: '别', pinyin: 'bié', zhuyin: 'ㄅㄧㄝˊ' },
+            { l: 7, char: '忘', simp: '忘', pinyin: 'wàng', zhuyin: 'ㄨㄤˋ' },
+            { l: 7, char: '用', simp: '用', pinyin: 'yòng', zhuyin: 'ㄩㄥˋ' },
+            { l: 7, char: '臉', simp: '脸', pinyin: 'liǎn', zhuyin: 'ㄌㄧㄢˇ' },
             // 第八課
-            { l: 8, char: '送', pinyin: 'sòng', zhuyin: 'ㄙㄨㄥˋ' },
-            { l: 8, char: '隻', pinyin: 'zhī', zhuyin: 'ㄓ' },
-            { l: 8, char: '狗', pinyin: 'gǒu', zhuyin: 'ㄍㄡˇ' },
-            { l: 8, char: '帶', pinyin: 'dài', zhuyin: 'ㄉㄞˋ' },
-            { l: 8, char: '散', pinyin: 'sàn', zhuyin: 'ㄙㄢˋ' },
-            { l: 8, char: '步', pinyin: 'bù', zhuyin: 'ㄅㄨˋ' },
-            { l: 8, char: '貓', pinyin: 'māo', zhuyin: 'ㄇㄠ' },
-            { l: 8, char: '非', pinyin: 'fēi', zhuyin: 'ㄈㄟ' },
-            { l: 8, char: '愛', pinyin: 'ài', zhuyin: 'ㄞˋ' },
+            { l: 8, char: '送', simp: '送', pinyin: 'sòng', zhuyin: 'ㄙㄨㄥˋ' },
+            { l: 8, char: '隻', simp: '只', pinyin: 'zhī', zhuyin: 'ㄓ' },
+            { l: 8, char: '狗', simp: '狗', pinyin: 'gǒu', zhuyin: 'ㄍㄡˇ' },
+            { l: 8, char: '帶', simp: '带', pinyin: 'dài', zhuyin: 'ㄉㄞˋ' },
+            { l: 8, char: '散', simp: '散', pinyin: 'sàn', zhuyin: 'ㄙㄢˋ' },
+            { l: 8, char: '步', simp: '步', pinyin: 'bù', zhuyin: 'ㄅㄨˋ' },
+            { l: 8, char: '貓', simp: '猫', pinyin: 'māo', zhuyin: 'ㄇㄠ' },
+            { l: 8, char: '非', simp: '非', pinyin: 'fēi', zhuyin: 'ㄈㄟ' },
+            { l: 8, char: '愛', simp: '爱', pinyin: 'ài', zhuyin: 'ㄞˋ' },
             // 第九課
-            { l: 9, char: '南', pinyin: 'nán', zhuyin: 'ㄋㄢˊ' },
-            { l: 9, char: '北', pinyin: 'běi', zhuyin: 'ㄅㄟˇ' },
-            { l: 9, char: '方', pinyin: 'fāng', zhuyin: 'ㄈㄤ' },
-            { l: 9, char: '裡', pinyin: 'lǐ', zhuyin: 'ㄌㄧˇ' },
-            { l: 9, char: '校', pinyin: 'xiào', zhuyin: 'ㄒㄧㄠˋ' },
-            { l: 9, char: '門', pinyin: 'mén', zhuyin: 'ㄇㄣˊ' },
-            { l: 9, char: '口', pinyin: 'kǒu', zhuyin: 'ㄎㄡˇ' },
-            { l: 9, char: '因', pinyin: 'yīn', zhuyin: 'ㄧㄣ' },
-            { l: 9, char: '為', pinyin: 'wèi', zhuyin: 'ㄨㄟˋ' },
-            { l: 9, char: '所', pinyin: 'suǒ', zhuyin: 'ㄙㄨㄛˇ' },
+            { l: 9, char: '南', simp: '南', pinyin: 'nán', zhuyin: 'ㄋㄢˊ' },
+            { l: 9, char: '北', simp: '北', pinyin: 'běi', zhuyin: 'ㄅㄟˇ' },
+            { l: 9, char: '方', simp: '方', pinyin: 'fāng', zhuyin: 'ㄈㄤ' },
+            { l: 9, char: '裡', simp: '里', pinyin: 'lǐ', zhuyin: 'ㄌㄧˇ' },
+            { l: 9, char: '校', simp: '校', pinyin: 'xiào', zhuyin: 'ㄒㄧㄠˋ' },
+            { l: 9, char: '門', simp: '门', pinyin: 'mén', zhuyin: 'ㄇㄣˊ' },
+            { l: 9, char: '口', simp: '口', pinyin: 'kǒu', zhuyin: 'ㄎㄡˇ' },
+            { l: 9, char: '因', simp: '因', pinyin: 'yīn', zhuyin: 'ㄧㄣ' },
+            { l: 9, char: '為', simp: '为', pinyin: 'wèi', zhuyin: 'ㄨㄟˋ' },
+            { l: 9, char: '所', simp: '所', pinyin: 'suǒ', zhuyin: 'ㄙㄨㄛˇ' },
             // 第十課
-            { l: 10, char: '本', pinyin: 'běn', zhuyin: 'ㄅㄣˇ' },
-            { l: 10, char: '著', pinyin: 'zhe', zhuyin: '˙ㄓㄜ' },
-            { l: 10, char: '退', pinyin: 'tuì', zhuyin: 'ㄊㄨㄟˋ' },
-            { l: 10, char: '休', pinyin: 'xiū', zhuyin: 'ㄒㄧㄡ' },
-            { l: 10, char: '次', pinyin: 'cì', zhuyin: 'ㄘˋ' },
-            { l: 10, char: '旅', pinyin: 'lǚ', zhuyin: 'ㄌㄩˇ' },
-            { l: 10, char: '行', pinyin: 'xíng', zhuyin: 'ㄒㄧㄥˊ' },
-            { l: 10, char: '法', pinyin: 'fǎ', zhuyin: 'ㄈㄚˇ' },
-            { l: 10, char: '國', pinyin: 'guó', zhuyin: 'ㄍㄨㄛˊ' },
+            { l: 10, char: '本', simp: '本', pinyin: 'běn', zhuyin: 'ㄅㄣˇ' },
+            { l: 10, char: '著', simp: '着', pinyin: 'zhe', zhuyin: '˙ㄓㄜ' },
+            { l: 10, char: '退', simp: '退', pinyin: 'tuì', zhuyin: 'ㄊㄨㄟˋ' },
+            { l: 10, char: '休', simp: '休', pinyin: 'xiū', zhuyin: 'ㄒㄧㄡ' },
+            { l: 10, char: '次', simp: '次', pinyin: 'cì', zhuyin: 'ㄘˋ' },
+            { l: 10, char: '旅', simp: '旅', pinyin: 'lǚ', zhuyin: 'ㄌㄩˇ' },
+            { l: 10, char: '行', simp: '行', pinyin: 'xíng', zhuyin: 'ㄒㄧㄥˊ' },
+            { l: 10, char: '法', simp: '法', pinyin: 'fǎ', zhuyin: 'ㄈㄚˇ' },
+            { l: 10, char: '國', simp: '国', pinyin: 'guó', zhuyin: 'ㄍㄨㄛˊ' },
             // 第十一課
-            { l: 11, char: '動', pinyin: 'dòng', zhuyin: 'ㄉㄨㄥˋ' },
-            { l: 11, char: '物', pinyin: 'wù', zhuyin: 'ㄨˋ' },
-            { l: 11, char: '園', pinyin: 'yuán', zhuyin: 'ㄩㄢˊ' },
-            { l: 11, char: '老', pinyin: 'lǎo', zhuyin: 'ㄌㄠˇ' },
-            { l: 11, char: '希', pinyin: 'xī', zhuyin: 'ㄒㄧ' },
-            { l: 11, char: '望', pinyin: 'wàng', zhuyin: 'ㄨㄤˋ' },
-            { l: 11, char: '但', pinyin: 'dàn', zhuyin: 'ㄉㄢˋ' },
-            { l: 11, char: '胖', pinyin: 'pàng', zhuyin: 'ㄆㄤˋ' },
-            { l: 11, char: '真', pinyin: 'zhēn', zhuyin: 'ㄓㄣ' },
-            { l: 11, char: '長', pinyin: 'cháng', zhuyin: 'ㄔㄤˊ' },
+            { l: 11, char: '動', simp: '动', pinyin: 'dòng', zhuyin: 'ㄉㄨㄥˋ' },
+            { l: 11, char: '物', simp: '物', pinyin: 'wù', zhuyin: 'ㄨˋ' },
+            { l: 11, char: '園', simp: '园', pinyin: 'yuán', zhuyin: 'ㄩㄢˊ' },
+            { l: 11, char: '老', simp: '老', pinyin: 'lǎo', zhuyin: 'ㄌㄠˇ' },
+            { l: 11, char: '希', simp: '希', pinyin: 'xī', zhuyin: 'ㄒㄧ' },
+            { l: 11, char: '望', simp: '望', pinyin: 'wàng', zhuyin: 'ㄨㄤˋ' },
+            { l: 11, char: '但', simp: '但', pinyin: 'dàn', zhuyin: 'ㄉㄢˋ' },
+            { l: 11, char: '胖', simp: '胖', pinyin: 'pàng', zhuyin: 'ㄆㄤˋ' },
+            { l: 11, char: '真', simp: '真', pinyin: 'zhēn', zhuyin: 'ㄓㄣ' },
+            { l: 11, char: '長', simp: '长', pinyin: 'cháng', zhuyin: 'ㄔㄤˊ' },
             // 第十二課
-            { l: 12, char: '久', pinyin: 'jiǔ', zhuyin: 'ㄐㄧㄡˇ' },
-            { l: 12, char: '話', pinyin: 'huà', zhuyin: 'ㄏㄨㄚˋ' },
-            { l: 12, char: '高', pinyin: 'gāo', zhuyin: 'ㄍㄠ' },
-            { l: 12, char: '課', pinyin: 'kè', zhuyin: 'ㄎㄜˋ' },
-            { l: 12, char: '寫', pinyin: 'xiě', zhuyin: 'ㄒㄧㄝˇ' },
-            { l: 12, char: '沒', pinyin: 'méi', zhuyin: 'ㄇㄟˊ' },
-            { l: 12, char: '題', pinyin: 'tí', zhuyin: 'ㄊㄧˊ' },
-            { l: 12, char: '定', pinyin: 'dìng', zhuyin: 'ㄉㄧㄥˋ' },
-            { l: 12, char: '意', pinyin: 'yì', zhuyin: 'ㄧˋ' },
-            { l: 12, char: '思', pinyin: 'sī', zhuyin: 'ㄙ' }
+            { l: 12, char: '久', simp: '久', pinyin: 'jiǔ', zhuyin: 'ㄐㄧㄡˇ' },
+            { l: 12, char: '話', simp: '话', pinyin: 'huà', zhuyin: 'ㄏㄨㄚˋ' },
+            { l: 12, char: '高', simp: '高', pinyin: 'gāo', zhuyin: 'ㄍㄠ' },
+            { l: 12, char: '課', simp: '课', pinyin: 'kè', zhuyin: 'ㄎㄜˋ' },
+            { l: 12, char: '寫', simp: '写', pinyin: 'xiě', zhuyin: 'ㄒㄧㄝˇ' },
+            { l: 12, char: '沒', simp: '没', pinyin: 'méi', zhuyin: 'ㄇㄟˊ' },
+            { l: 12, char: '題', simp: '题', pinyin: 'tí', zhuyin: 'ㄊㄧˊ' },
+            { l: 12, char: '定', simp: '定', pinyin: 'dìng', zhuyin: 'ㄉㄧㄥˋ' },
+            { l: 12, char: '意', simp: '意', pinyin: 'yì', zhuyin: 'ㄧˋ' },
+            { l: 12, char: '思', simp: '思', pinyin: 'sī', zhuyin: 'ㄙ' }
         ];
 
         let writer = null;
@@ -474,9 +541,22 @@
         const SCORE_KEY = 'hanzi_learning_scores_v2';
         const CUSTOM_VOCAB_KEY = 'hanzi_learning_custom_vocab'; 
         let scoreHistory = {};
+        
+        // 模式狀態：true = 簡體, false = 繁體
+        let isSimplified = false;
+        
+        // New State for Streak
+        let streakCount = 0;
 
         // --- Init ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Load Mode preference
+            const savedMode = localStorage.getItem('hanzi_mode');
+            if (savedMode === 'simplified') {
+                isSimplified = true;
+            }
+            updateModeUI();
+
             loadScores();
             loadCustomVocab();
             initLessonSelect();
@@ -484,9 +564,58 @@
             setupTouchEvents();
             setupKeyboardEvents();
             initInstallPrompt();
+            
+            // Handle Resize efficiently
+            window.addEventListener('resize', debounce(() => {
+                renderStage();
+            }, 300));
         });
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
 
         // --- Logic ---
+        function toggleMode() {
+            isSimplified = !isSimplified;
+            localStorage.setItem('hanzi_mode', isSimplified ? 'simplified' : 'traditional');
+            updateModeUI();
+            
+            // Re-render
+            updateLessonData(currentLesson === 'custom' ? 'custom' : currentLesson);
+        }
+
+        function updateModeUI() {
+            const btn = document.getElementById('mode-btn');
+            const title = document.getElementById('app-title');
+            
+            if (isSimplified) {
+                document.body.classList.add('mode-simp');
+                btn.innerText = '简体';
+                title.innerText = '学华语向前走(二)';
+            } else {
+                document.body.classList.remove('mode-simp');
+                btn.innerText = '繁體';
+                title.innerText = '學華語向前走(二)';
+            }
+        }
+
+        // Helper to get character based on mode
+        function getChar(item) {
+            if (isSimplified && item.simp) {
+                return item.simp;
+            }
+            return item.char;
+        }
+
         function loadScores() {
             try {
                 const stored = localStorage.getItem(SCORE_KEY);
@@ -502,6 +631,7 @@
         }
 
         function saveScore(char, score) {
+            // Always save score against the displayed char
             const currentBest = scoreHistory[char] || 0;
             if (score > currentBest) {
                 scoreHistory[char] = score;
@@ -540,6 +670,7 @@
 
         function updateLessonData(lesson) {
             currentLesson = lesson;
+            streakCount = 0; // Reset streak on lesson change
             
             if (lesson === 'custom') {
                 lessonVocab = customVocab;
@@ -563,25 +694,27 @@
             
             lessonVocab.forEach((item, idx) => {
                 const div = document.createElement('div');
-                div.className = `strip-item flex-none w-20 h-24 bg-white rounded-xl flex flex-col items-center justify-center cursor-pointer border hover:border-blue-300 shadow-sm ${idx === currentIndex ? 'active ring-2 ring-blue-400' : ''}`;
+                div.className = `strip-item flex-none w-14 h-16 md:w-20 md:h-24 bg-white rounded-lg md:rounded-xl flex flex-col items-center justify-center cursor-pointer border hover:border-blue-300 shadow-sm ${idx === currentIndex ? 'active ring-2 ring-blue-400' : ''}`;
                 div.onclick = () => {
                     currentIndex = idx;
                     renderStripHighlight();
                     renderStage();
                 };
 
-                const score = scoreHistory[item.char];
+                const displayChar = getChar(item);
+                const score = scoreHistory[displayChar];
                 const stars = score ? getStars(score) : '';
                 const starHtml = stars ? `<div class="text-[8px] text-yellow-500 absolute top-1 right-1 leading-none">${stars}</div>` : '';
 
                 const pinyinDisplay = item.pinyin ? item.pinyin : '';
-                const zhuyinDisplay = item.zhuyin ? item.zhuyin : '';
+                // 簡體模式不顯示注音
+                const zhuyinDisplay = isSimplified ? '' : (item.zhuyin || '');
 
                 div.innerHTML = `
                     ${starHtml}
-                    <div class="text-xs text-gray-400 ui-font mb-1">${zhuyinDisplay}</div>
-                    <div class="text-3xl char-font leading-none text-gray-800">${item.char}</div>
-                    <div class="text-[10px] text-blue-500 ui-font mt-1 font-semibold">${pinyinDisplay}</div>
+                    <div class="text-[10px] md:text-xs text-gray-400 ui-font mb-0.5 md:mb-1 h-[14px]">${zhuyinDisplay}</div>
+                    <div class="text-2xl md:text-3xl char-font leading-none text-gray-800">${displayChar}</div>
+                    <div class="text-[8px] md:text-[10px] text-blue-500 ui-font mt-0.5 md:mt-1 font-semibold">${pinyinDisplay}</div>
                 `;
                 strip.appendChild(div);
             });
@@ -614,6 +747,7 @@
             }
             
             const item = lessonVocab[currentIndex];
+            const displayChar = getChar(item);
 
             document.getElementById('stage-zhuyin').innerText = item.zhuyin || '';
             document.getElementById('stage-pinyin').innerText = item.pinyin || '';
@@ -626,19 +760,25 @@
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('data-source-tag').innerText = '';
             
-            const bestScore = scoreHistory[item.char];
+            const bestScore = scoreHistory[displayChar];
             const bestEl = document.getElementById('current-best-score');
             bestEl.innerText = bestScore ? `${bestScore}` : '';
 
+            // 智慧型尺寸計算：同時考量容器的寬度與剩餘高度
+            const card = document.getElementById('writer-card');
             const wrapper = document.getElementById('writer-wrapper');
-            const wrapperWidth = wrapper.clientWidth || 300; 
-            const size = Math.min(wrapperWidth, 320);
+            
+            const availableWidth = card.clientWidth - 48;
+            const maxSafeHeight = window.innerHeight * 0.55; 
+            const size = Math.min(availableWidth, maxSafeHeight, 500);
             
             target.style.width = `${size}px`;
             target.style.height = `${size}px`;
+            wrapper.style.width = `${size}px`; 
+            wrapper.style.height = `${size}px`;
 
             try {
-                writer = HanziWriter.create('writer-target', item.char, {
+                writer = HanziWriter.create('writer-target', displayChar, {
                     width: size,
                     height: size,
                     padding: 10,
@@ -658,39 +798,52 @@
                         document.getElementById('loading-indicator').classList.add('hidden');
                         document.getElementById('error-msg').classList.remove('hidden');
                     },
-                    // Critical Fix: Custom Data Loader with Fallback
+                    // Critical Fix: Custom Data Loader with Fallback Logic based on Mode
                     charDataLoader: function(char, onComplete, onError) {
                         const encodedChar = encodeURIComponent(char);
                         
-                        // 1. 優先嘗試 Artex (GitHub) - 繁體修正版
+                        // 1. Artex (GitHub) - 繁體修正版
                         const urlTraditional = `https://cdn.jsdelivr.net/gh/Artex/hanzi-writer-data-traditional@master/data/${encodedChar}.json`;
                         
-                        // 2. 備用方案 (Standard NPM) - 絕對穩定的備援
+                        // 2. 備用方案 (Standard NPM) - 絕對穩定的備援 (簡體字/標準字)
                         const urlStandard = `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodedChar}.json`;
 
-                        fetch(urlTraditional)
-                            .then(res => {
-                                if (!res.ok) throw new Error('TW fail');
-                                return res.json();
-                            })
-                            .then(json => {
-                                document.getElementById('data-source-tag').innerText = 'TW';
-                                onComplete(json);
-                            })
-                            .catch(() => {
-                                console.warn(`Switching to standard data for: ${char}`);
-                                fetch(urlStandard)
-                                    .then(res => res.json())
-                                    .then(json => {
-                                        document.getElementById('data-source-tag').innerText = 'STD';
-                                        onComplete(json);
-                                    })
-                                    .catch(err => {
-                                        console.error('Fatal: All sources failed', err);
-                                        document.getElementById('loading-indicator').classList.add('hidden');
-                                        document.getElementById('error-msg').classList.remove('hidden');
-                                    });
-                            });
+                        if (isSimplified) {
+                            // 簡體模式：優先嘗試 Standard，失敗才試 Artex (雖然後者主要是繁體)
+                            fetch(urlStandard)
+                                .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+                                .then(json => {
+                                    document.getElementById('data-source-tag').innerText = 'STD';
+                                    onComplete(json);
+                                })
+                                .catch(() => {
+                                    fetch(urlTraditional)
+                                        .then(res => res.json())
+                                        .then(json => {
+                                            document.getElementById('data-source-tag').innerText = 'TW';
+                                            onComplete(json);
+                                        })
+                                        .catch(onError);
+                                });
+                        } else {
+                            // 繁體模式：優先 Artex (TW)，備援 Standard
+                            fetch(urlTraditional)
+                                .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+                                .then(json => {
+                                    document.getElementById('data-source-tag').innerText = 'TW';
+                                    onComplete(json);
+                                })
+                                .catch(() => {
+                                    console.warn(`Switching to standard data for: ${char}`);
+                                    fetch(urlStandard)
+                                        .then(res => res.json())
+                                        .then(json => {
+                                            document.getElementById('data-source-tag').innerText = 'STD';
+                                            onComplete(json);
+                                        })
+                                        .catch(onError);
+                                });
+                        }
                     }
                 });
             } catch(e) {
@@ -751,10 +904,13 @@
         function speakCurrentChar() {
             if (lessonVocab.length === 0) return;
             const item = lessonVocab[currentIndex];
+            const char = getChar(item);
+            
             window.speechSynthesis.cancel();
             
-            const u = new SpeechSynthesisUtterance(item.char);
-            u.lang = 'zh-TW';
+            const u = new SpeechSynthesisUtterance(char);
+            // 根據模式切換語言口音
+            u.lang = isSimplified ? 'zh-CN' : 'zh-TW';
             u.rate = 0.8;
             window.speechSynthesis.speak(u);
         }
@@ -787,8 +943,40 @@
             showFeedback('開始練習', '#22c55e');
         }
 
-        function triggerConfetti() {
-            var duration = 3 * 1000;
+        // New Visual Effects
+        function triggerFlowerShower() {
+            // Flowers: Scalar falling objects, colorful
+            var duration = 3000;
+            var end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0, y: 0.2 }, // Top Left
+                    colors: ['#ffc0cb', '#ff69b4', '#ff1493', '#ffffff'], // Pink/White
+                    scalar: 2, // Larger
+                    drift: 1
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1, y: 0.2 }, // Top Right
+                    colors: ['#ffc0cb', '#ff69b4', '#ff1493', '#ffffff'],
+                    scalar: 2,
+                    drift: -1
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        function triggerFireworks() {
+            var duration = 5 * 1000;
             var animationEnd = Date.now() + duration;
             var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
 
@@ -804,48 +992,85 @@
               }
 
               var particleCount = 50 * (timeLeft / duration);
-              confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInOut(0.1, 0.3), y: Math.random() - 0.2 } }));
-              confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInOut(0.7, 0.9), y: Math.random() - 0.2 } }));
+              // Random bursts
+              confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInOut(0.1, 0.9), y: Math.random() - 0.2 } }));
             }, 250);
+        }
+        
+        function triggerSimpleConfetti() {
+             confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
         }
 
         function startQuiz() {
             if(!writer) return;
             speakCurrentChar();
-            writer.hideOutline();
+            writer.showOutline(); // 修改：測驗時顯示輪廓，跟練習模式一樣
 
             writer.quiz({
                 onMistake: function(strokeData) {
                     showFeedback('加油！', '#ef4444');
-                    writer.showOutline();
-                    setTimeout(() => writer.hideOutline(), 500);
+                    // 移除錯誤時閃爍輪廓的邏輯，因為現在輪廓已經常駐顯示了
                 },
                 onComplete: function(summaryData) {
                     const mistakes = summaryData.totalMistakes;
                     const score = Math.max(0, 100 - (mistakes * 10));
                     const item = lessonVocab[currentIndex];
-                    saveScore(item.char, score);
+                    const char = getChar(item);
                     
-                    const isPerfectLesson = lessonVocab.every(word => (scoreHistory[word.char] || 0) === 100);
+                    // 1. Update Score
+                    saveScore(char, score);
+                    
+                    // 2. Update Streak
+                    if (score === 100) {
+                        streakCount++;
+                    } else {
+                        streakCount = 0;
+                    }
+                    
+                    // 3. Check for Perfect Lesson (All chars have 100 score in history)
+                    const isPerfectLesson = lessonVocab.every(word => (scoreHistory[getChar(word)] || 0) === 100);
 
                     renderStrip(); 
-                    showResultModal(score);
                     
-                    if (score === 100 && isPerfectLesson) {
-                        setTimeout(() => { triggerConfetti(); }, 500);
+                    // 4. Trigger Effects & Show Modal
+                    let effectType = 'normal';
+                    
+                    if (isPerfectLesson) {
+                        effectType = 'perfect_lesson'; // Rename for clarity
+                        setTimeout(triggerFireworks, 500);
+                    } else if (streakCount > 0 && streakCount % 3 === 0) {
+                        effectType = 'streak_fireworks'; // Changed from 'flowers' to 'streak_fireworks'
+                        setTimeout(triggerFireworks, 500); // Changed function call
+                    } else if (score === 100) {
+                         setTimeout(triggerSimpleConfetti, 500);
                     }
+
+                    showResultModal(score, effectType);
                 }
             });
             showFeedback('測驗模式', '#a855f7');
         }
 
         // Modals
-        function showResultModal(score) {
+        function showResultModal(score, effectType) {
             const modal = document.getElementById('result-modal');
             const scoreEl = document.getElementById('result-score');
             const starsEl = document.getElementById('result-stars');
             const emojiEl = document.getElementById('result-emoji');
+            const titleEl = document.getElementById('result-title');
             
+            const streakMsg = document.getElementById('streak-msg');
+            const perfectMsg = document.getElementById('perfect-msg');
+            
+            // Reset state
+            streakMsg.classList.add('hidden');
+            perfectMsg.classList.add('hidden');
+            titleEl.innerText = "測驗完成";
+
             scoreEl.innerText = score;
             
             let stars = '';
@@ -855,6 +1080,16 @@
             else if (score >= 80) { stars = '⭐⭐'; emoji = '😎'; }
             else if (score >= 60) { stars = '⭐'; emoji = '🙂'; }
             else { stars = '💪'; emoji = '💪'; }
+
+            if (effectType === 'perfect_lesson') {
+                emoji = '🎆';
+                perfectMsg.classList.remove('hidden');
+                titleEl.innerText = "完美通關！";
+            } else if (effectType === 'streak_fireworks') {
+                emoji = '🎆'; // Fireworks emoji
+                streakMsg.innerText = `🎆 連續 ${streakCount} 次 100 分！太強了！ 🎆`; // Update text/emoji
+                streakMsg.classList.remove('hidden');
+            }
             
             starsEl.innerHTML = stars;
             emojiEl.innerText = emoji;
@@ -873,7 +1108,8 @@
             
             let hasRecord = false;
             lessonVocab.forEach(item => {
-                const score = scoreHistory[item.char];
+                const char = getChar(item);
+                const score = scoreHistory[char];
                 if (score !== undefined) {
                     hasRecord = true;
                     let color = score === 100 ? 'text-green-600' : (score >= 60 ? 'text-blue-600' : 'text-red-500');
@@ -881,7 +1117,7 @@
                     div.className = `flex justify-between p-3 border-b items-center`;
                     div.innerHTML = `
                         <div class="flex items-center gap-3">
-                            <span class="text-2xl char-font font-bold">${item.char}</span>
+                            <span class="text-2xl char-font font-bold">${char}</span>
                             <span class="text-xs text-gray-500">${item.pinyin || ''}</span>
                         </div>
                         <div class="font-bold ${color}">${score}分</div>
@@ -901,6 +1137,8 @@
         // --- Custom Input Logic ---
         function openCustomModal() {
             document.getElementById('custom-modal').classList.remove('hidden');
+            // 在自訂模式下，若使用繁體輸入，切換到簡體模式，目前並不會自動轉換內容，
+            // 而是直接使用輸入的字符作為練習對象。
             const currentChars = customVocab.map(item => item.char).join('');
             document.getElementById('custom-input').value = currentChars;
             document.getElementById('custom-input').focus();
@@ -908,6 +1146,7 @@
 
         function closeCustomModal() {
             document.getElementById('custom-modal').classList.add('hidden');
+            hideDeleteConfirm(); // Reset delete view
         }
 
         function saveCustomWords() {
@@ -918,16 +1157,40 @@
                  if(text.trim() === '') {
                      customVocab = []; 
                  } else {
-                     alert('請輸入有效的中文字');
+                     showToast('請輸入有效的中文字');
                      return;
                  }
             } else {
-                customVocab = chars.map(char => ({
-                    l: 'custom',
-                    char: char,
-                    pinyin: '',
-                    zhuyin: ''
-                }));
+                // Initialize converters
+                let cn2tw = null;
+                let tw2cn = null;
+                try {
+                    cn2tw = OpenCC.Converter({ from: 'cn', to: 'tw' });
+                    tw2cn = OpenCC.Converter({ from: 'tw', to: 'cn' });
+                } catch(e) {
+                    console.warn("OpenCC init failed", e);
+                }
+
+                customVocab = chars.map(char => {
+                    let traditional = char;
+                    let simplified = char;
+
+                    if (cn2tw && tw2cn) {
+                        // Normalize: assume user might type simplified OR traditional
+                        // Convert to Traditional first (as base 'char')
+                        traditional = cn2tw(char);
+                        // Convert that Traditional to Simplified (as 'simp')
+                        simplified = tw2cn(traditional);
+                    }
+
+                    return {
+                        l: 'custom',
+                        char: traditional,
+                        simp: simplified,
+                        pinyin: '',
+                        zhuyin: ''
+                    };
+                });
             }
             
             localStorage.setItem(CUSTOM_VOCAB_KEY, JSON.stringify(customVocab));
@@ -935,6 +1198,32 @@
             document.getElementById('lesson-select').value = 'custom';
             updateLessonData('custom');
             closeCustomModal();
+            showToast('已更新自訂課程');
+        }
+
+        // Custom Delete Logic
+        function showDeleteConfirm() {
+            document.getElementById('custom-delete-confirm').classList.remove('hidden');
+        }
+
+        function hideDeleteConfirm() {
+            document.getElementById('custom-delete-confirm').classList.add('hidden');
+        }
+
+        function confirmDeleteCustom() {
+            customVocab = [];
+            localStorage.removeItem(CUSTOM_VOCAB_KEY);
+            document.getElementById('custom-input').value = '';
+            
+            // If currently viewing custom lesson, switch to lesson 1
+            if(currentLesson === 'custom') {
+                document.getElementById('lesson-select').value = 1;
+                updateLessonData(1);
+            }
+            
+            hideDeleteConfirm();
+            closeCustomModal();
+            showToast('已刪除自訂課程');
         }
 
         let deferredPrompt;
@@ -979,7 +1268,7 @@
         function openOfficialMoe() {
             if (lessonVocab.length === 0) return;
             const item = lessonVocab[currentIndex];
-            // 複製並跳轉 (為了方便搜尋)
+            // 複製繁體字，因為萌典是台灣字典
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(item.char);
             }
@@ -989,7 +1278,9 @@
         function showDictionary() {
             if (lessonVocab.length === 0) return;
             const item = lessonVocab[currentIndex];
-            const char = item.char;
+            // 即使在簡體模式，查詢字典時仍使用繁體字 (item.char)
+            // 因為萌典 (moedict) 資料庫鍵值是繁體
+            const char = item.char; 
 
             const modal = document.getElementById('dict-modal');
             const contentArea = document.getElementById('dict-content-area');
