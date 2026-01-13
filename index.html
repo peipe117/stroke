@@ -143,6 +143,11 @@
                 </h1>
                 
                 <div class="flex items-center gap-2">
+                    <!-- 靜音開關 -->
+                    <button onclick="toggleMute()" id="mute-btn" class="text-xl text-gray-400 hover:text-gray-600 transition p-1 rounded-full hover:bg-gray-100">
+                        🔊
+                    </button>
+
                     <!-- 繁簡切換按鈕 -->
                     <button onclick="toggleMode()" id="mode-btn" class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 transition shadow-sm border border-gray-200">
                         繁體
@@ -545,8 +550,12 @@
         // 模式狀態：true = 簡體, false = 繁體
         let isSimplified = false;
         
+        // 靜音狀態
+        let isMuted = false;
+        
         // New State for Streak
         let streakCount = 0;
+        let fireworksInterval = null; // 用來存取煙火的 Interval ID
 
         // --- Init ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -589,6 +598,12 @@
             localStorage.setItem('hanzi_mode', isSimplified ? 'simplified' : 'traditional');
             updateModeUI();
             
+            // 模式切換時，為了確保正確載入對應字體筆順，這裡我們強制銷毀 writer 重建
+            if(writer) {
+                writer = null; 
+                document.getElementById('writer-target').innerHTML = '';
+            }
+            
             // Re-render
             updateLessonData(currentLesson === 'custom' ? 'custom' : currentLesson);
         }
@@ -605,6 +620,19 @@
                 document.body.classList.remove('mode-simp');
                 btn.innerText = '繁體';
                 title.innerText = '學華語向前走(二)';
+            }
+        }
+        
+        function toggleMute() {
+            isMuted = !isMuted;
+            const btn = document.getElementById('mute-btn');
+            if(isMuted) {
+                btn.innerText = '🔇';
+                btn.classList.add('text-red-400');
+                window.speechSynthesis.cancel();
+            } else {
+                btn.innerText = '🔊';
+                btn.classList.remove('text-red-400');
             }
         }
 
@@ -738,7 +766,10 @@
             }
         }
 
+        // --- Major Optimization: Reusing HanziWriter Instance ---
         function renderStage() {
+            clearEffects(); // 清除殘留特效
+
             if (lessonVocab.length === 0) {
                 document.getElementById('writer-target').innerHTML = '';
                 document.getElementById('stage-zhuyin').innerText = '';
@@ -752,9 +783,7 @@
             document.getElementById('stage-zhuyin').innerText = item.zhuyin || '';
             document.getElementById('stage-pinyin').innerText = item.pinyin || '';
 
-            const target = document.getElementById('writer-target');
-            target.innerHTML = '';
-            
+            // 確保錯誤訊息與 Loading 狀態重置
             document.getElementById('feedback-msg').style.opacity = 0;
             document.getElementById('error-msg').classList.add('hidden');
             document.getElementById('loading-indicator').classList.remove('hidden');
@@ -764,7 +793,7 @@
             const bestEl = document.getElementById('current-best-score');
             bestEl.innerText = bestScore ? `${bestScore}` : '';
 
-            // 智慧型尺寸計算：同時考量容器的寬度與剩餘高度
+            // 智慧型尺寸計算
             const card = document.getElementById('writer-card');
             const wrapper = document.getElementById('writer-wrapper');
             
@@ -772,86 +801,138 @@
             const maxSafeHeight = window.innerHeight * 0.55; 
             const size = Math.min(availableWidth, maxSafeHeight, 500);
             
+            // 設定容器大小
+            const target = document.getElementById('writer-target');
             target.style.width = `${size}px`;
             target.style.height = `${size}px`;
             wrapper.style.width = `${size}px`; 
             wrapper.style.height = `${size}px`;
 
+            if (writer) {
+                // 如果 writer 已經存在，更新大小並切換字元 (效能優化點)
+                writer.updateDimensions({ width: size, height: size });
+                
+                // 使用 setCharacter 切換字元
+                writer.setCharacter(displayChar);
+                
+                // 由於 setCharacter 是 Promise，我們需要手動處理 Loading 狀態
+                // 但 HanziWriter 內部會有快取，通常很快。
+                // 為了簡單起見，我們假設它會觸發 onLoadCharDataSuccess 回呼 (但在 setCharacter 中其實不會觸發 create 時的 hook)
+                // 所以我們手動模擬載入流程:
+                
+                // 這裡是一個小技巧：setCharacter 雖然快，但我們希望保持一致的「演示」體驗
+                // 我們可以利用 setCharacter 的 callback
+                
+                // 更好的做法：重新綁定 writer 的行為比較複雜，
+                // 最穩定的 reuse 方式是呼叫 setCharacter 後，手動觸發動畫
+                
+                // 我們稍微修改邏輯：不依賴 create 的 callback，而是統一處理
+                loadCharIntoWriter(displayChar);
+
+            } else {
+                // 如果 writer 不存在，則建立 (初始化)
+                createNewWriter(displayChar, size);
+            }
+        }
+
+        // 獨立出建立 Writer 的邏輯
+        function createNewWriter(char, size) {
             try {
-                writer = HanziWriter.create('writer-target', displayChar, {
+                writer = HanziWriter.create('writer-target', char, {
                     width: size,
                     height: size,
                     padding: 10,
                     showOutline: true,
                     strokeAnimationSpeed: 1,
                     delayBetweenStrokes: 400,
-                    radicalColor: '#3b82f6', // blue-500
-                    strokeColor: '#334155',  // slate-700
-                    outlineColor: '#cbd5e1', // slate-300
+                    radicalColor: '#3b82f6',
+                    strokeColor: '#334155',
+                    outlineColor: '#cbd5e1',
                     
-                    onLoadCharDataSuccess: function() {
-                        document.getElementById('loading-indicator').classList.add('hidden');
-                        writer.animateCharacter();
-                        setTimeout(speakCurrentChar, 300);
-                    },
+                    // 這些 callback 只在 create 時被綁定，setCharacter 不會重複觸發它們
+                    // 所以我們需要一個統一的載入函式來管理 "切換字元後" 的行為
                     onLoadCharDataError: function(err) {
                         document.getElementById('loading-indicator').classList.add('hidden');
                         document.getElementById('error-msg').classList.remove('hidden');
                     },
-                    // Critical Fix: Custom Data Loader with Fallback Logic based on Mode
-                    charDataLoader: function(char, onComplete, onError) {
-                        const encodedChar = encodeURIComponent(char);
-                        
-                        // 1. Artex (GitHub) - 繁體修正版
-                        const urlTraditional = `https://cdn.jsdelivr.net/gh/Artex/hanzi-writer-data-traditional@master/data/${encodedChar}.json`;
-                        
-                        // 2. 備用方案 (Standard NPM) - 絕對穩定的備援 (簡體字/標準字)
-                        const urlStandard = `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodedChar}.json`;
-
-                        if (isSimplified) {
-                            // 簡體模式：優先嘗試 Standard，失敗才試 Artex (雖然後者主要是繁體)
-                            fetch(urlStandard)
-                                .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-                                .then(json => {
-                                    document.getElementById('data-source-tag').innerText = 'STD';
-                                    onComplete(json);
-                                })
-                                .catch(() => {
-                                    fetch(urlTraditional)
-                                        .then(res => res.json())
-                                        .then(json => {
-                                            document.getElementById('data-source-tag').innerText = 'TW';
-                                            onComplete(json);
-                                        })
-                                        .catch(onError);
-                                });
-                        } else {
-                            // 繁體模式：優先 Artex (TW)，備援 Standard
-                            fetch(urlTraditional)
-                                .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-                                .then(json => {
-                                    document.getElementById('data-source-tag').innerText = 'TW';
-                                    onComplete(json);
-                                })
-                                .catch(() => {
-                                    console.warn(`Switching to standard data for: ${char}`);
-                                    fetch(urlStandard)
-                                        .then(res => res.json())
-                                        .then(json => {
-                                            document.getElementById('data-source-tag').innerText = 'STD';
-                                            onComplete(json);
-                                        })
-                                        .catch(onError);
-                                });
-                        }
-                    }
+                    charDataLoader: getCharDataLoader()
                 });
+                
+                // 初始建立後，也走統一的載入流程確保動畫一致
+                loadCharIntoWriter(char);
+
             } catch(e) {
                 console.error(e);
             }
         }
 
+        // 統一的字元載入與動畫觸發邏輯
+        function loadCharIntoWriter(char) {
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('error-msg').classList.add('hidden');
+
+            // 呼叫 setCharacter (如果是新建的 writer，這會立即 resolve 因為資料正在載入或已載入)
+            writer.setCharacter(char).then(() => {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                writer.animateCharacter();
+                // 檢查靜音
+                if (!isMuted) {
+                    setTimeout(speakCurrentChar, 300);
+                }
+            }).catch((err) => {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('error-msg').classList.remove('hidden');
+            });
+        }
+
+        // 獨立出 DataLoader 邏輯
+        function getCharDataLoader() {
+            return function(char, onComplete, onError) {
+                const encodedChar = encodeURIComponent(char);
+                const urlTraditional = `https://cdn.jsdelivr.net/gh/Artex/hanzi-writer-data-traditional@master/data/${encodedChar}.json`;
+                const urlStandard = `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodedChar}.json`;
+
+                if (isSimplified) {
+                    fetch(urlStandard)
+                        .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+                        .then(json => {
+                            document.getElementById('data-source-tag').innerText = 'STD';
+                            onComplete(json);
+                        })
+                        .catch(() => {
+                            fetch(urlTraditional)
+                                .then(res => res.json())
+                                .then(json => {
+                                    document.getElementById('data-source-tag').innerText = 'TW';
+                                    onComplete(json);
+                                })
+                                .catch(onError);
+                        });
+                } else {
+                    fetch(urlTraditional)
+                        .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+                        .then(json => {
+                            document.getElementById('data-source-tag').innerText = 'TW';
+                            onComplete(json);
+                        })
+                        .catch(() => {
+                            console.warn(`Switching to standard data for: ${char}`);
+                            fetch(urlStandard)
+                                .then(res => res.json())
+                                .then(json => {
+                                    document.getElementById('data-source-tag').innerText = 'STD';
+                                    onComplete(json);
+                                })
+                                .catch(onError);
+                        });
+                }
+            }
+        }
+
         function reloadCurrent() {
+            // 強制重繪
+            writer = null;
+            document.getElementById('writer-target').innerHTML = '';
             renderStage();
         }
 
@@ -902,6 +983,7 @@
 
         // Actions
         function speakCurrentChar() {
+            if (isMuted) return; // 靜音檢查
             if (lessonVocab.length === 0) return;
             const item = lessonVocab[currentIndex];
             const char = getChar(item);
@@ -925,7 +1007,9 @@
 
         function startAnimation() {
             if(!writer) return;
-            speakCurrentChar();
+            // 每次點擊功能鍵也播放聲音 (若未靜音)
+            if(!isMuted) speakCurrentChar();
+            
             writer.showOutline();
             writer.animateCharacter();
             showFeedback('演示筆順', '#3b82f6');
@@ -933,7 +1017,8 @@
 
         function startPractice() {
             if(!writer) return;
-            speakCurrentChar();
+            if(!isMuted) speakCurrentChar();
+            
             writer.showOutline();
             writer.quiz({
                 onMistake: () => showFeedback('加油！', '#ef4444'),
@@ -943,9 +1028,17 @@
             showFeedback('開始練習', '#22c55e');
         }
 
+        // 清除特效 (重要優化)
+        function clearEffects() {
+            if (fireworksInterval) {
+                clearInterval(fireworksInterval);
+                fireworksInterval = null;
+            }
+            confetti.reset();
+        }
+
         // New Visual Effects
         function triggerFlowerShower() {
-            // Flowers: Scalar falling objects, colorful
             var duration = 3000;
             var end = Date.now() + duration;
 
@@ -984,11 +1077,14 @@
               return Math.random() * (max - min) + min;
             }
 
-            var interval = setInterval(function() {
+            // 清除舊的 timer
+            if(fireworksInterval) clearInterval(fireworksInterval);
+
+            fireworksInterval = setInterval(function() {
               var timeLeft = animationEnd - Date.now();
 
               if (timeLeft <= 0) {
-                return clearInterval(interval);
+                return clearInterval(fireworksInterval);
               }
 
               var particleCount = 50 * (timeLeft / duration);
@@ -1007,7 +1103,8 @@
 
         function startQuiz() {
             if(!writer) return;
-            speakCurrentChar();
+            if(!isMuted) speakCurrentChar();
+            
             writer.showOutline(); // 修改：測驗時顯示輪廓，跟練習模式一樣
 
             writer.quiz({
@@ -1099,6 +1196,7 @@
         function closeResultModal() {
             document.getElementById('result-modal').classList.add('hidden');
             if(writer) writer.showOutline();
+            clearEffects(); // 關閉視窗時停止特效
         }
 
         function openScoreModal() {
